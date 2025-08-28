@@ -348,7 +348,7 @@ class BrowserSimulator:
         return videos
 
 
-async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True):
+async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True, extended_pages=False):
     """
     获取指定日期范围内的视频数据 (支持API和浏览器模拟两种模式)
     :param uid: UP主UID (2137589551)
@@ -359,13 +359,14 @@ async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True
         - "browser": 使用浏览器模拟 (慢但避免安全风控)
         - "auto": 自动选择 (优先API，失败时切换到浏览器模拟)
     :param use_fallback: 保留参数以保持兼容性 (已停用模拟数据功能)
+    :param extended_pages: 是否启用扩展页数爬取 (用于历史数据计算，获取更多视频)
     :return: 视频列表 [{"aid": 视频ID, "view": 播放量, "comment": 评论数, "pubdate": 发布日期, "title": 标题, "created": 时间戳}]
     """
     
     if mode == "api" or (mode == "auto" and API_MODE_AVAILABLE):
         try:
             logger.info(f"开始使用API模式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
-            return await fetch_videos_api(uid, start_date, end_date)
+            return await fetch_videos_api(uid, start_date, end_date, extended_pages)
         except Exception as e:
             error_msg = str(e)
             if mode == "api":
@@ -375,22 +376,23 @@ async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True
             else:
                 # auto模式下，API失败时切换到浏览器模拟
                 logger.warning(f"API模式失败: {error_msg}，切换到浏览器模拟模式")
-                return await fetch_videos_browser(uid, start_date, end_date, use_fallback)
+                return await fetch_videos_browser(uid, start_date, end_date, use_fallback, extended_pages)
     
     elif mode == "browser" or mode == "auto":
         logger.info(f"开始使用浏览器模拟方式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
-        return await fetch_videos_browser(uid, start_date, end_date, use_fallback)
+        return await fetch_videos_browser(uid, start_date, end_date, use_fallback, extended_pages)
     
     else:
         raise ValueError(f"不支持的模式: {mode}. 支持的模式: 'api', 'browser', 'auto'")
 
 
-async def fetch_videos_api(uid, start_date, end_date):
+async def fetch_videos_api(uid, start_date, end_date, extended_pages=False):
     """
     使用bilibili-api-python库获取视频数据 (传统API模式)
     :param uid: UP主UID (2137589551)
     :param start_date: 起始日期 (YYYY-MM-DD)
     :param end_date: 结束日期 (YYYY-MM-DD)
+    :param extended_pages: 是否启用扩展页数爬取 (API模式中此参数将被忽略，API会尝试获取所有可用视频)
     :return: 视频列表
     """
     if not API_MODE_AVAILABLE:
@@ -435,13 +437,14 @@ async def fetch_videos_api(uid, start_date, end_date):
     return all_videos
 
 
-async def fetch_videos_browser(uid, start_date, end_date, use_fallback=True):
+async def fetch_videos_browser(uid, start_date, end_date, use_fallback=True, extended_pages=False):
     """
     使用浏览器模拟方式获取视频数据
     :param uid: UP主UID (2137589551)
     :param start_date: 起始日期 (YYYY-MM-DD)
     :param end_date: 结束日期 (YYYY-MM-DD)
     :param use_fallback: 保留参数以保持兼容性 (已停用模拟数据功能)
+    :param extended_pages: 是否启用扩展页数爬取 (获取更多视频数据，用于历史计算)
     :return: 视频列表
     """
     
@@ -453,7 +456,12 @@ async def fetch_videos_browser(uid, start_date, end_date, use_fallback=True):
             logger.info(f"浏览器模拟模式 - 第 {attempt + 1} 次尝试获取视频数据...")
             
             page = 1
-            max_pages = 5  # 最多获取5页数据，避免过度爬取
+            # 根据是否启用扩展模式动态设置页数限制
+            if extended_pages:
+                max_pages = 15  # 扩展模式：最多获取15页数据以确保历史计算有足够的视频
+                logger.info("启用扩展爬取模式，将获取更多页面的视频数据")
+            else:
+                max_pages = 5  # 标准模式：最多获取5页数据，避免过度爬取
             
             while page <= max_pages:
                 try:

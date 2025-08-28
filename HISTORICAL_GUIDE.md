@@ -5,7 +5,17 @@
 
 历史李大霄指数回推计算模块提供了使用当前视频数据作为历史数据近似值的功能。该模块通过将当前获取的视频播放量、评论数等数据作为指定历史日期的近似值，从而计算出相应的历史李大霄指数。
 
+**版本 2.0 新增特性：**
+- **智能数据获取范围**：根据目标历史日期自动调整视频数据获取范围
+- **扩展爬取模式**：针对较早的历史日期自动增加爬取页数以确保数据充足
+- **数据验证机制**：自动检查视频数据是否足够进行可靠的历史指数计算
+
 The Historical Li Daxiao Index Calculation Module provides functionality to approximate historical index values using current video data. This module treats current video view counts, comments, and other statistics as approximations for specified historical dates to calculate corresponding historical Li Daxiao indices.
+
+**Version 2.0 New Features:**
+- **Intelligent Data Fetch Range**: Automatically adjusts video data fetch range based on target historical dates
+- **Extended Crawling Mode**: Automatically increases page count for earlier historical dates to ensure sufficient data
+- **Data Validation Mechanism**: Automatically checks if video data is sufficient for reliable historical index calculation
 
 ## 核心理念 / Core Concept
 
@@ -14,14 +24,54 @@ The Historical Li Daxiao Index Calculation Module provides functionality to appr
 本模块的核心思想是：
 - **使用当前视频数据**：获取当前时点的视频播放量、评论数等统计数据
 - **作为历史数据近似**：将这些当前数据作为指定历史日期的近似值
+- **智能数据范围调整**：根据历史日期远近程度自动调整视频获取策略
 - **计算历史指数**：基于这些近似的历史数据计算出相应日期的李大霄指数
+- **数据验证保障**：确保有足够的视频数据进行可靠的指数计算
 - **累积数据存储**：将计算结果保存到累积历史数据文件中
 
 The core idea of this module is:
 - **Use current video data**: Fetch current video view counts, comments, and other statistics
 - **As historical approximations**: Treat this current data as approximations for specified historical dates
+- **Intelligent range adjustment**: Automatically adjust video fetch strategy based on how far back the historical date is
 - **Calculate historical indices**: Calculate Li Daxiao indices for those dates based on the approximated data
+- **Data validation assurance**: Ensure sufficient video data for reliable index calculation
 - **Accumulate data storage**: Save results to cumulative historical data files
+
+### 智能数据获取策略 / Intelligent Data Fetch Strategy
+
+**版本 2.0 引入了基于历史日期远近程度的自适应数据获取策略：**
+
+1. **最近日期 (≤30天)**：
+   - 视频获取范围：过去30天
+   - 爬取页数：标准(5页)
+   - 预期视频数：100-150个
+
+2. **中等距离 (31-90天)**：
+   - 视频获取范围：过去90天
+   - 爬取页数：扩展(15页)
+   - 预期视频数：300-450个
+
+3. **较早日期 (>90天)**：
+   - 视频获取范围：过去180天
+   - 爬取页数：扩展(15页)
+   - 预期视频数：300-450个
+
+**Version 2.0 introduces adaptive data fetch strategy based on historical date distance:**
+
+1. **Recent dates (≤30 days)**:
+   - Video fetch range: Past 30 days
+   - Page count: Standard (5 pages)
+   - Expected videos: 100-150
+
+2. **Medium distance (31-90 days)**:
+   - Video fetch range: Past 90 days
+   - Page count: Extended (15 pages)
+   - Expected videos: 300-450
+
+3. **Earlier dates (>90 days)**:
+   - Video fetch range: Past 180 days
+   - Page count: Extended (15 pages)
+   - Expected videos: 300-450
 
 ### 实际应用场景 / Practical Use Cases
 

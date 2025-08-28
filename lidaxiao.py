@@ -25,6 +25,109 @@ from visualizer import generate_all_charts, generate_historical_charts
 from historical import calculate_historical_index, calculate_batch_historical, HistoricalCalculator
 
 
+def determine_video_fetch_range(args, current_date):
+    """
+    根据历史计算需求动态确定视频获取范围
+    
+    :param args: 命令行参数
+    :param current_date: 当前日期字符串
+    :return: 包含开始日期、结束日期和是否启用扩展爬取的字典
+    """
+    current_dt = datetime.datetime.strptime(current_date, "%Y-%m-%d").date()
+    
+    # 确定最早的目标历史日期
+    earliest_target_date = None
+    
+    if args.target_date:
+        earliest_target_date = datetime.datetime.strptime(args.target_date, "%Y-%m-%d").date()
+    elif args.date_range:
+        start_date_str, _ = args.date_range.split(',')
+        earliest_target_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
+    else:
+        # 默认过去一周
+        earliest_target_date = current_dt - datetime.timedelta(days=6)
+    
+    # 根据目标日期的远近程度确定视频获取策略
+    days_ago = (current_dt - earliest_target_date).days
+    
+    if days_ago <= 30:  # 最近30天内
+        # 使用标准范围：过去30天
+        start_date = (current_dt - datetime.timedelta(days=29)).strftime("%Y-%m-%d")
+        fetch_all_pages = False
+        print(f"目标历史日期在最近30天内，使用标准视频获取策略")
+    elif days_ago <= 90:  # 最近90天内
+        # 使用扩展范围：过去90天，增加爬取页数
+        start_date = (current_dt - datetime.timedelta(days=89)).strftime("%Y-%m-%d")
+        fetch_all_pages = True
+        print(f"目标历史日期在最近90天内，使用扩展视频获取策略")
+    else:  # 90天以前
+        # 使用最大范围：过去180天，最大爬取页数
+        start_date = (current_dt - datetime.timedelta(days=179)).strftime("%Y-%m-%d")
+        fetch_all_pages = True
+        print(f"目标历史日期在90天前，使用最大范围视频获取策略")
+    
+    return {
+        "start_date": start_date,
+        "end_date": current_date,
+        "fetch_all_pages": fetch_all_pages,
+        "days_ago": days_ago
+    }
+
+
+def validate_video_data_sufficiency(videos, args):
+    """
+    验证视频数据是否足够进行历史指数计算
+    
+    :param videos: 视频数据列表
+    :param args: 命令行参数
+    :return: 是否有足够数据
+    """
+    if not videos:
+        print("⚠️  错误: 没有获取到任何视频数据！")
+        print("可能的原因:")
+        print("1. 网络连接问题")
+        print("2. Bilibili访问限制")
+        print("3. UP主在指定时间范围内没有发布视频")
+        print("解决建议:")
+        print("- 检查网络连接")
+        print("- 尝试使用浏览器模式: --mode browser")
+        print("- 稍后重试")
+        return False
+    
+    # 根据不同的历史计算模式设置最小视频数量要求
+    if args.target_date:
+        min_required = 10  # 单日期计算最少需要10个视频
+        context = "单日期历史指数计算"
+    elif args.date_range:
+        min_required = 20  # 批量计算最少需要20个视频
+        context = "批量历史指数计算"
+    else:
+        min_required = 15  # 默认过去一周计算最少需要15个视频
+        context = "默认历史指数计算"
+    
+    if len(videos) < min_required:
+        print(f"⚠️  警告: 视频数据可能不足！")
+        print(f"当前获取到 {len(videos)} 个视频，{context}建议至少需要 {min_required} 个视频")
+        print("这可能导致历史指数计算不够准确，建议:")
+        print("1. 扩大视频获取时间范围")
+        print("2. 尝试不同的爬取模式")
+        print("3. 检查UP主在相关时间段的视频发布情况")
+        
+        # 询问用户是否继续
+        try:
+            user_input = input("是否仍要继续计算? (y/n): ").lower().strip()
+            if user_input not in ['y', 'yes', '是', '继续']:
+                print("已取消历史指数计算")
+                return False
+        except (EOFError, KeyboardInterrupt):
+            # 在非交互环境中，默认继续执行但给出警告
+            print("检测到非交互环境，将继续执行但数据可能不够准确")
+            pass
+    
+    print(f"✓ 视频数据验证通过: {len(videos)} 个视频足够进行{context}")
+    return True
+
+
 async def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='李大霄指数计算程序')
@@ -58,13 +161,27 @@ async def run_historical_mode(args):
     print("=" * 50)
     
     current_date = datetime.date.today().strftime("%Y-%m-%d")
-    start_date = (datetime.date.today() - datetime.timedelta(days=DEFAULT_DAYS_RANGE-1)).strftime("%Y-%m-%d")
+    
+    # 根据目标历史日期动态确定视频获取范围，确保有足够的历史数据
+    video_fetch_range = determine_video_fetch_range(args, current_date)
+    start_date = video_fetch_range["start_date"]
+    end_date = video_fetch_range["end_date"]
+    fetch_all_pages = video_fetch_range["fetch_all_pages"]
+    
+    print(f"视频数据获取范围: {start_date} 至 {end_date}")
+    if fetch_all_pages:
+        print("启用扩展爬取模式以确保获取足够的历史数据")
     
     try:
         # 获取当前视频数据作为基础
-        print("正在获取当前视频数据作为历史数据回推基础...")
-        videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=current_date, mode=args.mode)
+        print("正在获取视频数据作为历史数据回推基础...")
+        videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=end_date, 
+                                  mode=args.mode, extended_pages=fetch_all_pages)
         print(f"获取到 {len(videos)} 个视频")
+        
+        # 验证视频数据是否足够
+        if not validate_video_data_sufficiency(videos, args):
+            return
         
         # 计算当前指数
         current_index = calculate_index(videos)
