@@ -41,12 +41,10 @@ API_REQUEST_CONFIG = {
     "trust_env": True,          # 信任环境代理设置
 }
 
-# 历史指数计算配置
-HISTORICAL_DECAY_RATE = 0.05     # 指数衰减率 (默认值，可通过参数覆盖)
-HISTORICAL_GROWTH_RATE = 0.02    # 线性增长率 (默认值，可通过参数覆盖)
+# 历史指数计算配置 (已简化 - 不再使用数学模型)
 
-# 历史计算支持的模型
-HISTORICAL_MODELS = ["exponential", "linear", "hybrid"]
+# 历史计算支持的模式 (现在只使用当前数据近似)
+HISTORICAL_APPROXIMATION_MODE = "current_data_as_historical"
 
 # 错误消息配置
 ERROR_MESSAGES = {

@@ -17,7 +17,7 @@ import datetime
 import asyncio
 import argparse
 
-from config import BILIBILI_UID, DEFAULT_DAYS_RANGE, HISTORICAL_MODELS
+from config import BILIBILI_UID, DEFAULT_DAYS_RANGE
 from crawler import fetch_videos, get_api_troubleshooting_info
 from calculator import calculate_index
 from storage import save_all_data, load_history_data
@@ -33,17 +33,11 @@ async def main():
     
     # 历史计算功能参数
     parser.add_argument('--historical', action='store_true',
-                       help='启用历史指数回推计算模式')
+                       help='启用历史指数回推计算模式 (使用当前视频数据作为历史数据近似)')
     parser.add_argument('--target-date', 
                        help='目标历史日期 (YYYY-MM-DD)')
     parser.add_argument('--date-range',
                        help='历史日期范围，格式: start_date,end_date (YYYY-MM-DD,YYYY-MM-DD)')
-    parser.add_argument('--historical-model', choices=HISTORICAL_MODELS, default='exponential',
-                       help='历史计算模型: exponential(指数衰减), linear(线性增长), hybrid(混合)')
-    parser.add_argument('--decay-rate', type=float,
-                       help='自定义指数衰减率 (默认0.05)')
-    parser.add_argument('--growth-rate', type=float,
-                       help='自定义线性增长率 (默认0.02)')
     
     args = parser.parse_args()
     
@@ -57,9 +51,10 @@ async def main():
 
 
 async def run_historical_mode(args):
-    """历史指数计算模式"""
+    """历史指数计算模式 - 使用当前视频数据作为历史数据近似"""
     print("=" * 50)
     print("历史李大霄指数回推计算模式")
+    print("使用当前视频数据作为历史数据近似")
     print("=" * 50)
     
     current_date = datetime.date.today().strftime("%Y-%m-%d")
@@ -67,13 +62,14 @@ async def run_historical_mode(args):
     
     try:
         # 获取当前视频数据作为基础
-        print("正在获取当前视频数据作为回推基础...")
+        print("正在获取当前视频数据作为历史数据回推基础...")
         videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=current_date, mode=args.mode)
         print(f"获取到 {len(videos)} 个视频")
         
         # 计算当前指数
         current_index = calculate_index(videos)
-        print(f"当前李大霄指数: {current_index:.2f}")
+        print(f"基于当前视频数据的指数: {current_index:.2f}")
+        print("说明: 将使用此数据作为历史各日期的近似值")
         
         # 处理不同的历史计算请求
         if args.target_date:
@@ -95,15 +91,13 @@ async def run_historical_mode(args):
 async def calculate_single_historical_date(videos, args, current_date, current_index):
     """计算单个历史日期"""
     target_date = args.target_date
-    model = args.historical_model
     
     print(f"\n正在计算 {target_date} 的历史指数...")
-    print(f"使用模型: {model}")
+    print("方法: 使用当前视频数据作为历史数据近似")
     
     try:
         historical_index = calculate_historical_index(
-            videos, target_date, current_date, model,
-            decay_rate=args.decay_rate, growth_rate=args.growth_rate
+            videos, target_date, current_date
         )
         
         days_diff = (datetime.datetime.strptime(current_date, "%Y-%m-%d").date() - 
@@ -112,9 +106,13 @@ async def calculate_single_historical_date(videos, args, current_date, current_i
         print(f"\n计算结果:")
         print(f"- 目标日期: {target_date} ({days_diff}天前)")
         print(f"- 当前指数: {current_index:.2f}")
-        print(f"- 历史指数: {historical_index:.2f}")
-        print(f"- 变化率: {((current_index - historical_index) / historical_index * 100):.1f}%")
-        print(f"- 使用模型: {model}")
+        print(f"- 历史指数近似值: {historical_index:.2f}")
+        print(f"- 说明: 使用当前视频数据作为 {target_date} 的近似值")
+        
+        # 将历史数据保存到累积数据中
+        from storage import update_history_data
+        update_history_data(target_date, historical_index)
+        print(f"- 已将历史数据保存到累积数据文件")
         
     except Exception as e:
         print(f"计算失败: {e}")
@@ -125,43 +123,40 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
     date_range_str = args.date_range
     start_date, end_date = date_range_str.split(',')
     
-    model = args.historical_model
     print(f"\n正在批量计算 {start_date} 至 {end_date} 的历史指数...")
-    print(f"使用模型: {model}")
+    print("方法: 使用当前视频数据作为每个历史日期的近似值")
     
     try:
         calculator = HistoricalCalculator()
         date_list = calculator.generate_date_range(start_date, end_date)
         
         results = calculate_batch_historical(
-            videos, date_list, current_date, model,
-            decay_rate=args.decay_rate, growth_rate=args.growth_rate
+            videos, date_list, current_date
         )
         
         print(f"\n批量计算结果:")
-        print(f"{'日期':<12} {'历史指数':<10} {'模型':<12} {'状态'}")
-        print("-" * 50)
+        print(f"{'日期':<12} {'历史指数近似值':<15} {'状态'}")
+        print("-" * 40)
         
         for result in results:
             status = "✓ 成功" if "error" not in result else "✗ 失败"
-            print(f"{result['date']:<12} {result['index']:<10.2f} {result['model']:<12} {status}")
+            print(f"{result['date']:<12} {result['index']:<15.2f} {status}")
         
-        # 保存批量结果到文件
+        # 保存批量结果到累积历史数据
+        from storage import update_history_data
+        success_count = 0
+        for result in results:
+            if "error" not in result:
+                update_history_data(result['date'], result['index'])
+                success_count += 1
+        
+        # 同时保存批量结果到单独文件
         filename = f"historical_batch_{start_date}_{end_date}.json"
         import json
         with open(filename, "w", encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
         print(f"\n批量结果已保存到: {filename}")
-        
-        # 生成可视化图表
-        print("正在生成历史趋势图表...")
-        chart_files = generate_historical_charts(
-            videos, current_date, results, target_date=start_date
-        )
-        if chart_files:
-            print("生成的图表文件:")
-            for chart_file in chart_files:
-                print(f"- {chart_file}")
+        print(f"已将 {success_count} 条历史数据保存到累积数据文件")
         
     except Exception as e:
         print(f"批量计算失败: {e}")
@@ -169,9 +164,8 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
 
 async def calculate_default_historical_range(videos, args, current_date, current_index):
     """计算默认历史范围(过去一周)"""
-    model = args.historical_model
-    print(f"\n正在计算过去一周的历史指数...")
-    print(f"使用模型: {model}")
+    print(f"\n正在计算过去一周的历史指数近似值...")
+    print("方法: 使用当前视频数据作为每个历史日期的近似值")
     
     try:
         end_date = datetime.date.today()
@@ -184,46 +178,36 @@ async def calculate_default_historical_range(videos, args, current_date, current
         )
         
         results = calculate_batch_historical(
-            videos, date_list, current_date, model,
-            decay_rate=args.decay_rate, growth_rate=args.growth_rate
+            videos, date_list, current_date
         )
         
-        print(f"\n过去一周历史指数:")
-        print(f"{'日期':<12} {'历史指数':<10} {'趋势'}")
-        print("-" * 35)
+        print(f"\n过去一周历史指数近似值:")
+        print(f"{'日期':<12} {'历史指数近似值':<15} {'说明'}")
+        print("-" * 50)
         
         for i, result in enumerate(results):
-            if i == 0:
-                trend = "-"
+            if i == len(results) - 1:  # 今天
+                description = "当前值"
             else:
-                prev_index = results[i-1]['index']
-                curr_index = result['index']
-                if curr_index > prev_index:
-                    trend = "↗"
-                elif curr_index < prev_index:
-                    trend = "↘"
-                else:
-                    trend = "→"
+                description = "近似值"
             
-            print(f"{result['date']:<12} {result['index']:<10.2f} {trend}")
+            print(f"{result['date']:<12} {result['index']:<15.2f} {description}")
         
-        # 保存默认结果
+        # 保存批量结果到累积历史数据
+        from storage import update_history_data
+        success_count = 0
+        for result in results:
+            if "error" not in result:
+                update_history_data(result['date'], result['index'])
+                success_count += 1
+        
+        # 保存默认结果到单独文件
         filename = f"historical_week_{current_date}.json"
         import json
         with open(filename, "w", encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
         print(f"\n历史数据已保存到: {filename}")
-        
-        # 生成可视化图表
-        print("正在生成历史趋势图表...")
-        week_ago = (datetime.date.today() - datetime.timedelta(days=6)).strftime("%Y-%m-%d")
-        chart_files = generate_historical_charts(
-            videos, current_date, results, target_date=week_ago
-        )
-        if chart_files:
-            print("生成的图表文件:")
-            for chart_file in chart_files:
-                print(f"- {chart_file}")
+        print(f"已将 {success_count} 条历史数据保存到累积数据文件")
         
     except Exception as e:
         print(f"默认历史计算失败: {e}")
