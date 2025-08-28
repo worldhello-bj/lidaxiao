@@ -5,26 +5,45 @@
 
 历史李大霄指数回推计算模块提供了使用当前视频数据作为历史数据近似值的功能。该模块通过将当前获取的视频播放量、评论数等数据作为指定历史日期的近似值，从而计算出相应的历史李大霄指数。
 
-**版本 2.0 新增特性：**
+**版本 3.0 新增特性：**
+- **6天偏移规则**：严格遵循李大霄指数计算规则，每个目标日期往回倒6天进行计算
+- **动态函数式计算**：摒弃硬编码分类，使用连续函数动态计算数据范围
 - **智能数据获取范围**：根据目标历史日期自动调整视频数据获取范围
 - **扩展爬取模式**：针对较早的历史日期自动增加爬取页数以确保数据充足
 - **数据验证机制**：自动检查视频数据是否足够进行可靠的历史指数计算
 
 The Historical Li Daxiao Index Calculation Module provides functionality to approximate historical index values using current video data. This module treats current video view counts, comments, and other statistics as approximations for specified historical dates to calculate corresponding historical Li Daxiao indices.
 
-**Version 2.0 New Features:**
+**Version 3.0 New Features:**
+- **6-Day Offset Rule**: Strictly follows Li Daxiao index calculation rule, going back 6 days from each target date
+- **Dynamic Function-Based Calculation**: Abandons hardcoded categorization, uses continuous functions to dynamically calculate data ranges
 - **Intelligent Data Fetch Range**: Automatically adjusts video data fetch range based on target historical dates
 - **Extended Crawling Mode**: Automatically increases page count for earlier historical dates to ensure sufficient data
 - **Data Validation Mechanism**: Automatically checks if video data is sufficient for reliable historical index calculation
 
 ## 核心理念 / Core Concept
 
+### 李大霄指数计算规则 / Li Daxiao Index Calculation Rule
+
+**重要：本模块严格遵循李大霄指数的6天回退计算规则**
+
+- **6天偏移原则**：计算任意日期X的指数时，实际使用的是日期(X-6天)的数据
+- **显示vs计算日期**：用户看到的是显示日期，但实际计算基于该日期往回倒6天的有效计算日期
+- **示例**：计算2024-08-20的指数，实际使用2024-08-14的数据进行计算
+
+**Important: This module strictly follows the 6-day retrospective calculation rule of Li Daxiao Index**
+
+- **6-Day Offset Principle**: When calculating the index for any date X, the actual calculation uses data from date (X-6 days)
+- **Display vs Calculation Date**: Users see the display date, but actual calculation is based on the effective calculation date (display date - 6 days)
+- **Example**: To calculate index for 2024-08-20, actual calculation uses data from 2024-08-14
+
 ### 数据近似原理 / Data Approximation Principle
 
 本模块的核心思想是：
 - **使用当前视频数据**：获取当前时点的视频播放量、评论数等统计数据
 - **作为历史数据近似**：将这些当前数据作为指定历史日期的近似值
-- **智能数据范围调整**：根据历史日期远近程度自动调整视频获取策略
+- **应用6天偏移规则**：确保每个目标日期都按照往回倒6天的规则进行计算
+- **动态范围计算**：使用连续函数而非离散分类确定视频数据获取范围
 - **计算历史指数**：基于这些近似的历史数据计算出相应日期的李大霄指数
 - **数据验证保障**：确保有足够的视频数据进行可靠的指数计算
 - **累积数据存储**：将计算结果保存到累积历史数据文件中
@@ -32,46 +51,59 @@ The Historical Li Daxiao Index Calculation Module provides functionality to appr
 The core idea of this module is:
 - **Use current video data**: Fetch current video view counts, comments, and other statistics
 - **As historical approximations**: Treat this current data as approximations for specified historical dates
-- **Intelligent range adjustment**: Automatically adjust video fetch strategy based on how far back the historical date is
+- **Apply 6-day offset rule**: Ensure each target date follows the 6-day retrospective calculation rule
+- **Dynamic range calculation**: Use continuous functions instead of discrete categorization to determine video data fetch range
 - **Calculate historical indices**: Calculate Li Daxiao indices for those dates based on the approximated data
 - **Data validation assurance**: Ensure sufficient video data for reliable index calculation
 - **Accumulate data storage**: Save results to cumulative historical data files
 
-### 智能数据获取策略 / Intelligent Data Fetch Strategy
+### 动态数据获取策略 / Dynamic Data Fetch Strategy
 
-**版本 2.0 引入了基于历史日期远近程度的自适应数据获取策略：**
+**版本 3.0 引入了基于连续函数的自适应数据获取策略：**
 
-1. **最近日期 (≤30天)**：
-   - 视频获取范围：过去30天
-   - 爬取页数：标准(5页)
-   - 预期视频数：100-150个
+**动态计算公式**：
+- **有效目标日期** = 显示日期 - 6天
+- **距离天数** = 当前日期 - 有效目标日期
+- **数据范围天数**:
+  - 距离 ≤ 0天: 30天 (标准爬取)
+  - 距离 ≤ 45天: max(30, 距离天数 + 15) (标准爬取)
+  - 距离 ≤ 120天: max(60, 距离天数 × 1.2) (扩展爬取)
+  - 距离 > 120天: max(180, 距离天数 × 1.5) (扩展爬取)
 
-2. **中等距离 (31-90天)**：
-   - 视频获取范围：过去90天
-   - 爬取页数：扩展(15页)
-   - 预期视频数：300-450个
+**优势**：
+- 摒弃硬编码的30/90/180天分类
+- 使用连续函数确保数据范围平滑调整
+- 根据实际距离动态计算所需数据量
+- 确保远期历史日期有足够的数据基础
 
-3. **较早日期 (>90天)**：
-   - 视频获取范围：过去180天
-   - 爬取页数：扩展(15页)
-   - 预期视频数：300-450个
+**示例**：
+- 目标日期 2024-08-20 → 有效日期 2024-08-14 → 数据范围 30天
+- 目标日期 2024-07-15 → 有效日期 2024-07-09 → 数据范围 60天
+- 目标日期 2024-05-01 → 有效日期 2024-04-25 → 数据范围 187天
+- 目标日期 2024-01-01 → 有效日期 2023-12-26 → 数据范围 369天
 
-**Version 2.0 introduces adaptive data fetch strategy based on historical date distance:**
+**Version 3.0 introduces continuous function-based adaptive data fetch strategy:**
 
-1. **Recent dates (≤30 days)**:
-   - Video fetch range: Past 30 days
-   - Page count: Standard (5 pages)
-   - Expected videos: 100-150
+**Dynamic Calculation Formula**:
+- **Effective Target Date** = Display Date - 6 days
+- **Days Distance** = Current Date - Effective Target Date
+- **Data Range Days**:
+  - Distance ≤ 0 days: 30 days (standard crawling)
+  - Distance ≤ 45 days: max(30, distance + 15) (standard crawling)
+  - Distance ≤ 120 days: max(60, distance × 1.2) (extended crawling)
+  - Distance > 120 days: max(180, distance × 1.5) (extended crawling)
 
-2. **Medium distance (31-90 days)**:
-   - Video fetch range: Past 90 days
-   - Page count: Extended (15 pages)
-   - Expected videos: 300-450
+**Advantages**:
+- Eliminates hardcoded 30/90/180-day categorization
+- Uses continuous functions for smooth data range adjustment
+- Dynamically calculates required data volume based on actual distance
+- Ensures sufficient data foundation for distant historical dates
 
-3. **Earlier dates (>90 days)**:
-   - Video fetch range: Past 180 days
-   - Page count: Extended (15 pages)
-   - Expected videos: 300-450
+**Examples**:
+- Target date 2024-08-20 → Effective date 2024-08-14 → Data range 30 days
+- Target date 2024-07-15 → Effective date 2024-07-09 → Data range 60 days
+- Target date 2024-05-01 → Effective date 2024-04-25 → Data range 187 days
+- Target date 2024-01-01 → Effective date 2023-12-26 → Data range 369 days
 
 ### 实际应用场景 / Practical Use Cases
 
@@ -110,11 +142,13 @@ This approach is particularly suitable for:
 from historical import calculate_historical_index
 
 # 使用当前视频数据计算2024-08-20的历史指数
+# 注意：实际计算基于2024-08-14的数据（往回倒6天）
 historical_index = calculate_historical_index(
     videos=current_videos,           # 当前视频数据
-    target_date="2024-08-20",       # 目标历史日期
+    target_date="2024-08-20",       # 目标历史日期（显示日期）
     current_date="2024-08-28"       # 当前日期(可选)
 )
+# 结果：显示为2024-08-20的指数，但基于2024-08-14的计算规则
 ```
 
 #### 批量计算 (Batch Calculation)
@@ -122,12 +156,17 @@ historical_index = calculate_historical_index(
 from historical import calculate_batch_historical
 
 # 批量计算过去一周的历史指数近似值
+# 每个日期都会自动应用6天偏移规则
 date_range = ["2024-08-21", "2024-08-22", "2024-08-23", ...]
 results = calculate_batch_historical(
     videos=current_videos,
     date_range=date_range,
     current_date="2024-08-28"
 )
+# 结果示例：
+# 2024-08-21 -> 基于2024-08-15计算
+# 2024-08-22 -> 基于2024-08-16计算
+# 等等...
 ```
 
 ### 3. 命令行接口 / Command Line Interface
@@ -135,17 +174,33 @@ results = calculate_batch_historical(
 #### 基本用法 (Basic Usage)
 ```bash
 # 启用历史计算模式 - 计算过去一周的历史指数近似值
+# 每个日期自动应用6天偏移规则
 python3 lidaxiao.py --historical
 
 # 计算特定日期的历史指数近似值
+# 显示2024-08-20的指数，实际基于2024-08-14计算
 python3 lidaxiao.py --historical --target-date 2024-08-20
 
 # 批量计算日期范围的历史指数近似值
+# 范围内每个日期都应用6天偏移规则
 python3 lidaxiao.py --historical --date-range 2024-08-15,2024-08-25
 ```
 
+#### 6天偏移规则示例 (6-Day Offset Rule Examples)
+```bash
+# 示例1：计算今天(2024-08-28)的指数
+# 实际使用2024-08-22的数据进行计算
+python3 lidaxiao.py --historical --target-date 2024-08-28
+
+# 示例2：批量计算本周
+# 2024-08-22显示日期 -> 基于2024-08-16计算
+# 2024-08-23显示日期 -> 基于2024-08-17计算
+# 等等...
+python3 lidaxiao.py --historical --date-range 2024-08-22,2024-08-28
+```
+
 #### 参数说明 (Parameter Description)
-- `--historical`: 启用历史计算模式（使用当前视频数据作为历史数据近似）
+- `--historical`: 启用历史计算模式（使用当前视频数据作为历史数据近似，自动应用6天偏移规则）
 - `--target-date DATE`: 目标历史日期 (YYYY-MM-DD格式)
 - `--date-range START,END`: 历史日期范围 (YYYY-MM-DD,YYYY-MM-DD格式)
 

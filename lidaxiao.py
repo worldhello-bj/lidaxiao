@@ -25,6 +25,76 @@ from visualizer import generate_all_charts, generate_historical_charts
 from historical import calculate_historical_index, calculate_batch_historical, HistoricalCalculator
 
 
+def calculate_effective_target_date(target_date):
+    """
+    计算有效的目标日期，减去6天（李大霄指数计算规则）
+    
+    :param target_date: 原始目标日期
+    :return: 有效目标日期（减去6天后）
+    """
+    if isinstance(target_date, str):
+        target_dt = datetime.datetime.strptime(target_date, "%Y-%m-%d").date()
+    else:
+        target_dt = target_date
+    
+    # 李大霄指数计算规则：往回倒6天
+    effective_target = target_dt - datetime.timedelta(days=6)
+    return effective_target
+
+
+def calculate_data_range_for_target(effective_target_date, current_date):
+    """
+    基于有效目标日期动态计算所需的视频数据范围
+    使用连续函数而非离散分类
+    
+    :param effective_target_date: 有效目标日期（已减去6天）
+    :param current_date: 当前日期
+    :return: 包含数据范围天数和是否扩展爬取的字典
+    """
+    if isinstance(current_date, str):
+        current_dt = datetime.datetime.strptime(current_date, "%Y-%m-%d").date()
+    else:
+        current_dt = current_date
+        
+    if isinstance(effective_target_date, str):
+        effective_target_dt = datetime.datetime.strptime(effective_target_date, "%Y-%m-%d").date()
+    else:
+        effective_target_dt = effective_target_date
+    
+    # 计算有效目标日期距离当前的天数
+    days_ago = (current_dt - effective_target_dt).days
+    
+    # 使用连续函数计算数据范围，而非离散分类
+    # 基本原则：目标日期越久远，需要更大的数据范围来确保数据充足
+    if days_ago <= 0:
+        # 未来日期或当天，使用最小范围
+        data_range_days = 30
+        fetch_all_pages = False
+    elif days_ago <= 45:
+        # 近期日期，数据范围随天数线性增长
+        data_range_days = max(30, days_ago + 15)
+        fetch_all_pages = False
+    elif days_ago <= 120:
+        # 中期日期，需要更多数据和扩展爬取
+        data_range_days = max(60, int(days_ago * 1.2))
+        fetch_all_pages = True
+    else:
+        # 远期日期，使用最大范围确保数据充足
+        data_range_days = max(180, int(days_ago * 1.5))
+        fetch_all_pages = True
+    
+    # 确保数据范围不超过实际可用天数
+    max_available_days = (current_dt - datetime.date(2020, 1, 1)).days  # 假设2020年开始有数据
+    data_range_days = min(data_range_days, max_available_days)
+    
+    return {
+        "data_range_days": data_range_days,
+        "fetch_all_pages": fetch_all_pages,
+        "days_ago": days_ago,
+        "effective_target_date": effective_target_dt
+    }
+
+
 def determine_video_fetch_range(args, current_date):
     """
     根据历史计算需求动态确定视频获取范围
@@ -44,33 +114,33 @@ def determine_video_fetch_range(args, current_date):
         start_date_str, _ = args.date_range.split(',')
         earliest_target_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
     else:
-        # 默认过去一周
+        # 默认过去一周（从今天开始往前推7天）
         earliest_target_date = current_dt - datetime.timedelta(days=6)
     
-    # 根据目标日期的远近程度确定视频获取策略
-    days_ago = (current_dt - earliest_target_date).days
+    # 计算有效目标日期（减去6天）
+    effective_target_date = calculate_effective_target_date(earliest_target_date)
     
-    if days_ago <= 30:  # 最近30天内
-        # 使用标准范围：过去30天
-        start_date = (current_dt - datetime.timedelta(days=29)).strftime("%Y-%m-%d")
-        fetch_all_pages = False
-        print(f"目标历史日期在最近30天内，使用标准视频获取策略")
-    elif days_ago <= 90:  # 最近90天内
-        # 使用扩展范围：过去90天，增加爬取页数
-        start_date = (current_dt - datetime.timedelta(days=89)).strftime("%Y-%m-%d")
-        fetch_all_pages = True
-        print(f"目标历史日期在最近90天内，使用扩展视频获取策略")
-    else:  # 90天以前
-        # 使用最大范围：过去180天，最大爬取页数
-        start_date = (current_dt - datetime.timedelta(days=179)).strftime("%Y-%m-%d")
-        fetch_all_pages = True
-        print(f"目标历史日期在90天前，使用最大范围视频获取策略")
+    # 基于有效目标日期动态计算数据范围
+    range_info = calculate_data_range_for_target(effective_target_date, current_dt)
+    data_range_days = range_info["data_range_days"]
+    fetch_all_pages = range_info["fetch_all_pages"]
+    days_ago = range_info["days_ago"]
+    
+    # 计算视频数据获取的开始日期
+    start_date = (current_dt - datetime.timedelta(days=data_range_days - 1)).strftime("%Y-%m-%d")
+    
+    print(f"目标历史日期: {earliest_target_date}")
+    print(f"有效计算日期: {effective_target_date} (减去6天)")
+    print(f"距离当前: {days_ago} 天")
+    print(f"视频数据范围: {data_range_days} 天 ({'扩展爬取' if fetch_all_pages else '标准爬取'})")
     
     return {
         "start_date": start_date,
         "end_date": current_date,
         "fetch_all_pages": fetch_all_pages,
-        "days_ago": days_ago
+        "days_ago": days_ago,
+        "effective_target_date": effective_target_date.strftime("%Y-%m-%d"),
+        "data_range_days": data_range_days
     }
 
 
@@ -208,9 +278,11 @@ async def run_historical_mode(args):
 async def calculate_single_historical_date(videos, args, current_date, current_index):
     """计算单个历史日期"""
     target_date = args.target_date
+    effective_date = calculate_effective_target_date(target_date)
     
     print(f"\n正在计算 {target_date} 的历史指数...")
     print("方法: 使用当前视频数据作为历史数据近似")
+    print(f"李大霄指数计算规则: 基于 {effective_date.strftime('%Y-%m-%d')} (往回倒6天) 的数据")
     
     try:
         historical_index = calculate_historical_index(
@@ -220,16 +292,20 @@ async def calculate_single_historical_date(videos, args, current_date, current_i
         days_diff = (datetime.datetime.strptime(current_date, "%Y-%m-%d").date() - 
                     datetime.datetime.strptime(target_date, "%Y-%m-%d").date()).days
         
+        effective_days_diff = (datetime.datetime.strptime(current_date, "%Y-%m-%d").date() - 
+                              effective_date).days
+        
         print(f"\n计算结果:")
-        print(f"- 目标日期: {target_date} ({days_diff}天前)")
+        print(f"- 显示日期: {target_date} ({days_diff}天前)")
+        print(f"- 有效计算日期: {effective_date.strftime('%Y-%m-%d')} ({effective_days_diff}天前)")
         print(f"- 当前指数: {current_index:.2f}")
         print(f"- 历史指数近似值: {historical_index:.2f}")
-        print(f"- 说明: 使用当前视频数据作为 {target_date} 的近似值")
+        print(f"- 说明: 使用当前视频数据作为 {effective_date.strftime('%Y-%m-%d')} 的近似值")
         
         # 将历史数据保存到累积数据中
         from storage import update_history_data
         update_history_data(target_date, historical_index)
-        print(f"- 已将历史数据保存到累积数据文件")
+        print(f"- 已将历史数据保存到累积数据文件 (基于6天前数据计算)")
         
     except Exception as e:
         print(f"计算失败: {e}")
@@ -242,6 +318,7 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
     
     print(f"\n正在批量计算 {start_date} 至 {end_date} 的历史指数...")
     print("方法: 使用当前视频数据作为每个历史日期的近似值")
+    print("李大霄指数计算规则: 每个日期基于往回倒6天的数据计算")
     
     try:
         calculator = HistoricalCalculator()
@@ -252,12 +329,14 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
         )
         
         print(f"\n批量计算结果:")
-        print(f"{'日期':<12} {'历史指数近似值':<15} {'状态'}")
-        print("-" * 40)
+        print(f"{'显示日期':<12} {'有效计算日期':<15} {'历史指数近似值':<15} {'状态'}")
+        print("-" * 65)
         
         for result in results:
+            display_date = result['date']
+            effective_date = calculate_effective_target_date(display_date).strftime("%Y-%m-%d")
             status = "✓ 成功" if "error" not in result else "✗ 失败"
-            print(f"{result['date']:<12} {result['index']:<15.2f} {status}")
+            print(f"{display_date:<12} {effective_date:<15} {result['index']:<15.2f} {status}")
         
         # 保存批量结果到累积历史数据
         from storage import update_history_data
@@ -270,10 +349,20 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
         # 同时保存批量结果到单独文件
         filename = f"historical_batch_{start_date}_{end_date}.json"
         import json
+        
+        # 添加元数据说明6天偏移规则
+        output_data = {
+            "calculation_rule": "李大霄指数计算规则：每个日期的指数基于该日期往回倒6天的数据计算",
+            "explanation": "显示日期为用户查看的日期，有效计算日期为实际用于指数计算的日期（显示日期-6天）",
+            "date_range": f"{start_date} 至 {end_date}",
+            "results": results
+        }
+        
         with open(filename, "w", encoding='utf-8') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
         print(f"\n批量结果已保存到: {filename}")
         print(f"已将 {success_count} 条历史数据保存到累积数据文件")
+        print(f"注意: 每个指数值都是基于对应日期往回倒6天的数据计算的")
         
     except Exception as e:
         print(f"批量计算失败: {e}")
@@ -283,15 +372,23 @@ async def calculate_default_historical_range(videos, args, current_date, current
     """计算默认历史范围(过去一周)"""
     print(f"\n正在计算过去一周的历史指数近似值...")
     print("方法: 使用当前视频数据作为每个历史日期的近似值")
+    print("注意: 李大霄指数计算规则为往回倒6天")
     
     try:
-        end_date = datetime.date.today()
-        start_date = end_date - datetime.timedelta(days=6)  # 过去7天
+        current_dt = datetime.date.today()
+        # 计算默认范围：从今天开始往前推7天，但要考虑6天偏移
+        raw_end_date = current_dt
+        raw_start_date = current_dt - datetime.timedelta(days=6)  # 过去7天
+        
+        # 应用6天偏移规则：实际计算时每个日期都要减去6天
+        effective_end_date = calculate_effective_target_date(raw_end_date)
+        effective_start_date = calculate_effective_target_date(raw_start_date)
         
         calculator = HistoricalCalculator()
+        # 使用原始日期范围生成日期列表（用户看到的日期）
         date_list = calculator.generate_date_range(
-            start_date.strftime("%Y-%m-%d"), 
-            end_date.strftime("%Y-%m-%d")
+            raw_start_date.strftime("%Y-%m-%d"), 
+            raw_end_date.strftime("%Y-%m-%d")
         )
         
         results = calculate_batch_historical(
@@ -299,32 +396,45 @@ async def calculate_default_historical_range(videos, args, current_date, current
         )
         
         print(f"\n过去一周历史指数近似值:")
-        print(f"{'日期':<12} {'历史指数近似值':<15} {'说明'}")
-        print("-" * 50)
+        print(f"{'显示日期':<12} {'有效计算日期':<15} {'历史指数近似值':<15} {'说明'}")
+        print("-" * 70)
         
         for i, result in enumerate(results):
+            display_date = result['date']
+            effective_date = calculate_effective_target_date(display_date).strftime("%Y-%m-%d")
+            
             if i == len(results) - 1:  # 今天
                 description = "当前值"
             else:
                 description = "近似值"
             
-            print(f"{result['date']:<12} {result['index']:<15.2f} {description}")
+            print(f"{display_date:<12} {effective_date:<15} {result['index']:<15.2f} {description}")
         
         # 保存批量结果到累积历史数据
         from storage import update_history_data
         success_count = 0
         for result in results:
             if "error" not in result:
+                # 使用显示日期保存，但备注这是基于6天前数据计算的
                 update_history_data(result['date'], result['index'])
                 success_count += 1
         
         # 保存默认结果到单独文件
         filename = f"historical_week_{current_date}.json"
         import json
+        
+        # 添加元数据说明6天偏移规则
+        output_data = {
+            "calculation_rule": "李大霄指数计算规则：每个日期的指数基于该日期往回倒6天的数据计算",
+            "explanation": "显示日期为用户查看的日期，有效计算日期为实际用于指数计算的日期（显示日期-6天）",
+            "results": results
+        }
+        
         with open(filename, "w", encoding='utf-8') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
         print(f"\n历史数据已保存到: {filename}")
         print(f"已将 {success_count} 条历史数据保存到累积数据文件")
+        print(f"注意: 每个指数值都是基于对应日期往回倒6天的数据计算的")
         
     except Exception as e:
         print(f"默认历史计算失败: {e}")
