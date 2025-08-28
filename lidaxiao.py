@@ -17,11 +17,12 @@ import datetime
 import asyncio
 import argparse
 
-from config import BILIBILI_UID, DEFAULT_DAYS_RANGE
+from config import BILIBILI_UID, DEFAULT_DAYS_RANGE, HISTORICAL_MODELS
 from crawler import fetch_videos, get_api_troubleshooting_info
 from calculator import calculate_index
 from storage import save_all_data, load_history_data
 from visualizer import generate_all_charts
+from historical import calculate_historical_index, calculate_batch_historical, HistoricalCalculator
 
 
 async def main():
@@ -29,7 +30,186 @@ async def main():
     parser = argparse.ArgumentParser(description='李大霄指数计算程序')
     parser.add_argument('--mode', choices=['api', 'browser', 'auto'], default='auto',
                        help='获取模式: api(快速但可能触发412), browser(慢但稳定), auto(自动选择)')
+    
+    # 历史计算功能参数
+    parser.add_argument('--historical', action='store_true',
+                       help='启用历史指数回推计算模式')
+    parser.add_argument('--target-date', 
+                       help='目标历史日期 (YYYY-MM-DD)')
+    parser.add_argument('--date-range',
+                       help='历史日期范围，格式: start_date,end_date (YYYY-MM-DD,YYYY-MM-DD)')
+    parser.add_argument('--historical-model', choices=HISTORICAL_MODELS, default='exponential',
+                       help='历史计算模型: exponential(指数衰减), linear(线性增长), hybrid(混合)')
+    parser.add_argument('--decay-rate', type=float,
+                       help='自定义指数衰减率 (默认0.05)')
+    parser.add_argument('--growth-rate', type=float,
+                       help='自定义线性增长率 (默认0.02)')
+    
     args = parser.parse_args()
+    
+    # 历史计算模式
+    if args.historical:
+        await run_historical_mode(args)
+        return
+    
+    # 原有的当前指数计算模式
+    await run_current_mode(args)
+
+
+async def run_historical_mode(args):
+    """历史指数计算模式"""
+    print("=" * 50)
+    print("历史李大霄指数回推计算模式")
+    print("=" * 50)
+    
+    current_date = datetime.date.today().strftime("%Y-%m-%d")
+    start_date = (datetime.date.today() - datetime.timedelta(days=DEFAULT_DAYS_RANGE-1)).strftime("%Y-%m-%d")
+    
+    try:
+        # 获取当前视频数据作为基础
+        print("正在获取当前视频数据作为回推基础...")
+        videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=current_date, mode=args.mode)
+        print(f"获取到 {len(videos)} 个视频")
+        
+        # 计算当前指数
+        current_index = calculate_index(videos)
+        print(f"当前李大霄指数: {current_index:.2f}")
+        
+        # 处理不同的历史计算请求
+        if args.target_date:
+            # 单个日期计算
+            await calculate_single_historical_date(videos, args, current_date, current_index)
+        elif args.date_range:
+            # 批量日期计算
+            await calculate_batch_historical_dates(videos, args, current_date, current_index)
+        else:
+            # 默认计算过去一周的历史数据
+            await calculate_default_historical_range(videos, args, current_date, current_index)
+            
+    except Exception as e:
+        print(f"历史计算过程中发生错误: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+async def calculate_single_historical_date(videos, args, current_date, current_index):
+    """计算单个历史日期"""
+    target_date = args.target_date
+    model = args.historical_model
+    
+    print(f"\n正在计算 {target_date} 的历史指数...")
+    print(f"使用模型: {model}")
+    
+    try:
+        historical_index = calculate_historical_index(
+            videos, target_date, current_date, model,
+            decay_rate=args.decay_rate, growth_rate=args.growth_rate
+        )
+        
+        days_diff = (datetime.datetime.strptime(current_date, "%Y-%m-%d").date() - 
+                    datetime.datetime.strptime(target_date, "%Y-%m-%d").date()).days
+        
+        print(f"\n计算结果:")
+        print(f"- 目标日期: {target_date} ({days_diff}天前)")
+        print(f"- 当前指数: {current_index:.2f}")
+        print(f"- 历史指数: {historical_index:.2f}")
+        print(f"- 变化率: {((current_index - historical_index) / historical_index * 100):.1f}%")
+        print(f"- 使用模型: {model}")
+        
+    except Exception as e:
+        print(f"计算失败: {e}")
+
+
+async def calculate_batch_historical_dates(videos, args, current_date, current_index):
+    """批量计算历史日期"""
+    date_range_str = args.date_range
+    start_date, end_date = date_range_str.split(',')
+    
+    model = args.historical_model
+    print(f"\n正在批量计算 {start_date} 至 {end_date} 的历史指数...")
+    print(f"使用模型: {model}")
+    
+    try:
+        calculator = HistoricalCalculator()
+        date_list = calculator.generate_date_range(start_date, end_date)
+        
+        results = calculate_batch_historical(
+            videos, date_list, current_date, model,
+            decay_rate=args.decay_rate, growth_rate=args.growth_rate
+        )
+        
+        print(f"\n批量计算结果:")
+        print(f"{'日期':<12} {'历史指数':<10} {'模型':<12} {'状态'}")
+        print("-" * 50)
+        
+        for result in results:
+            status = "✓ 成功" if "error" not in result else "✗ 失败"
+            print(f"{result['date']:<12} {result['index']:<10.2f} {result['model']:<12} {status}")
+        
+        # 保存批量结果到文件
+        filename = f"historical_batch_{start_date}_{end_date}.json"
+        import json
+        with open(filename, "w", encoding='utf-8') as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        print(f"\n批量结果已保存到: {filename}")
+        
+    except Exception as e:
+        print(f"批量计算失败: {e}")
+
+
+async def calculate_default_historical_range(videos, args, current_date, current_index):
+    """计算默认历史范围(过去一周)"""
+    model = args.historical_model
+    print(f"\n正在计算过去一周的历史指数...")
+    print(f"使用模型: {model}")
+    
+    try:
+        end_date = datetime.date.today()
+        start_date = end_date - datetime.timedelta(days=6)  # 过去7天
+        
+        calculator = HistoricalCalculator()
+        date_list = calculator.generate_date_range(
+            start_date.strftime("%Y-%m-%d"), 
+            end_date.strftime("%Y-%m-%d")
+        )
+        
+        results = calculate_batch_historical(
+            videos, date_list, current_date, model,
+            decay_rate=args.decay_rate, growth_rate=args.growth_rate
+        )
+        
+        print(f"\n过去一周历史指数:")
+        print(f"{'日期':<12} {'历史指数':<10} {'趋势'}")
+        print("-" * 35)
+        
+        for i, result in enumerate(results):
+            if i == 0:
+                trend = "-"
+            else:
+                prev_index = results[i-1]['index']
+                curr_index = result['index']
+                if curr_index > prev_index:
+                    trend = "↗"
+                elif curr_index < prev_index:
+                    trend = "↘"
+                else:
+                    trend = "→"
+            
+            print(f"{result['date']:<12} {result['index']:<10.2f} {trend}")
+        
+        # 保存默认结果
+        filename = f"historical_week_{current_date}.json"
+        import json
+        with open(filename, "w", encoding='utf-8') as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        print(f"\n历史数据已保存到: {filename}")
+        
+    except Exception as e:
+        print(f"默认历史计算失败: {e}")
+
+
+async def run_current_mode(args):
+    """原有的当前指数计算模式"""
     
     # 获取当前日期
     d = datetime.date.today().strftime("%Y-%m-%d")

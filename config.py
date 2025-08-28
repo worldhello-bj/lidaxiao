@@ -41,6 +41,13 @@ API_REQUEST_CONFIG = {
     "trust_env": True,          # 信任环境代理设置
 }
 
+# 历史指数计算配置
+HISTORICAL_DECAY_RATE = 0.05     # 指数衰减率 (默认值，可通过参数覆盖)
+HISTORICAL_GROWTH_RATE = 0.02    # 线性增长率 (默认值，可通过参数覆盖)
+
+# 历史计算支持的模型
+HISTORICAL_MODELS = ["exponential", "linear", "hybrid"]
+
 # 错误消息配置
 ERROR_MESSAGES = {
     "412": "触发了Bilibili安全风控策略(412错误)。建议: 1)减少请求频率 2)检查网络环境 3)使用代理",
