@@ -23,7 +23,7 @@ async def main():
     d = datetime.date.today().strftime("%Y-%m-%d")
     start_date = (datetime.date.today() - datetime.timedelta(days=DEFAULT_DAYS_RANGE-1)).strftime("%Y-%m-%d")
     
-    print(f"开始计算李大霄指数...")
+    print(f"开始计算李大霄指数 (使用浏览器模拟技术)...")
     print(f"日期范围: {start_date} 至 {d}")
     
     try:
@@ -59,15 +59,15 @@ async def main():
         # 提供针对性的错误处理建议
         if "412" in error_msg or "安全风控" in error_msg:
             print("\n这是Bilibili安全风控错误。解决建议:")
-            print("1. 减少请求频率，等待一段时间后重试")
-            print("2. 使用代理或VPN")
-            print("3. 检查网络环境")
+            print("1. 程序已自动使用浏览器模拟技术，大幅降低触发概率")
+            print("2. 如仍有问题，可尝试: python3 api_config_tool.py safe")
+            print("3. 等待一段时间后重试")
             print("4. 运行demo.py使用模拟数据")
         elif "address associated with hostname" in error_msg:
             print("\n这是网络连接问题。解决建议:")
-            print("1. 检查网络连接")
-            print("2. 检查防火墙设置") 
-            print("3. 尝试使用代理")
+            print("1. 检查网络连接") 
+            print("2. 检查防火墙设置")
+            print("3. 程序使用浏览器模拟，网络要求较低")
             print("4. 运行demo.py使用模拟数据")
         
         print(f"\n详细故障排除信息:")
