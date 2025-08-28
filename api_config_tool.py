@@ -105,8 +105,7 @@ def main():
             timeout=20,
             retry_attempts=2,
             retry_delay=10,
-            rate_limit_delay=5,
-            enable_fallback=True
+            rate_limit_delay=5
         )
         print("✅ 已应用安全模式配置 (低风险，速度较慢)")
         print("💡 建议配合浏览器模拟模式使用: python3 lidaxiao.py --mode browser")
@@ -118,8 +117,7 @@ def main():
             timeout=15,
             retry_attempts=3,
             retry_delay=3,
-            rate_limit_delay=2,
-            enable_fallback=True
+            rate_limit_delay=2
         )
         print("✅ 已应用快速模式配置 (风险较高，速度较快)")
         print("⚠️  警告: 快速模式可能增加触发安全风控的概率")
@@ -135,14 +133,12 @@ def main():
             retry_attempts = int(input("重试次数 (建议2-3): ") or "2")
             retry_delay = int(input("重试延迟 (秒, 建议5-15): ") or "10")
             rate_limit_delay = int(input("请求间隔 (秒, 建议3-8): ") or "5")
-            enable_fallback = input("启用模拟数据回退? (y/n): ").lower().startswith('y')
             
             configure_api_settings(
                 timeout=timeout,
                 retry_attempts=retry_attempts,
                 retry_delay=retry_delay,
-                rate_limit_delay=rate_limit_delay,
-                enable_fallback=enable_fallback
+                rate_limit_delay=rate_limit_delay
             )
             print("✅ 已应用自定义配置")
             print_current_config()

@@ -80,13 +80,13 @@ async def main():
             print("1. 尝试浏览器模拟模式: python3 lidaxiao.py --mode browser")
             print("2. 使用安全配置: python3 api_config_tool.py safe")
             print("3. 等待一段时间后重试")
-            print("4. 运行demo.py使用模拟数据")
+            print("4. 运行demo.py查看演示功能")
         elif "address associated with hostname" in error_msg:
             print("\n这是网络连接问题。解决建议:")
             print("1. 检查网络连接") 
             print("2. 检查防火墙设置")
             print("3. 尝试浏览器模拟模式: python3 lidaxiao.py --mode browser")
-            print("4. 运行demo.py使用模拟数据")
+            print("4. 运行demo.py查看演示功能")
         
         print(f"\n详细故障排除信息:")
         print(get_api_troubleshooting_info())

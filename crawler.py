@@ -309,14 +309,38 @@ class BrowserSimulator:
                         title_elem = card.find(['h3', 'a'])
                         title = title_elem.get_text().strip() if title_elem else ''
                         
-                        # 由于HTML解析可能无法获取精确的播放量和评论数，使用随机模拟值
-                        videos.append({
-                            'aid': random.randint(100000, 999999),
-                            'view': random.randint(1000, 50000),
-                            'comment': random.randint(10, 1000),
-                            'title': title,
-                            'created': int(time.time()) - random.randint(86400, 2592000),  # 1-30天前
-                        })
+                        # 尝试从HTML中提取真实的统计数据
+                        view_count = 0
+                        comment_count = 0
+                        
+                        # 查找播放量和评论数元素
+                        stats_elements = card.find_all(['span', 'div'], class_=re.compile(r'(view|play|comment|弹幕)'))
+                        for elem in stats_elements:
+                            text = elem.get_text().strip()
+                            if any(keyword in text for keyword in ['播放', 'play', '观看']):
+                                view_count = self._parse_chinese_number(text)
+                            elif any(keyword in text for keyword in ['评论', 'comment', '弹幕']):
+                                comment_count = self._parse_chinese_number(text)
+                        
+                        # 提取视频ID
+                        video_id = None
+                        if 'av' in link['href']:
+                            av_match = re.search(r'/video/av(\d+)', link['href'])
+                            if av_match:
+                                video_id = av_match.group(1)
+                        else:
+                            bv_match = re.search(r'/video/(BV[\w]+)', link['href'])
+                            if bv_match:
+                                video_id = bv_match.group(1)
+                        
+                        if video_id:
+                            videos.append({
+                                'aid': video_id,
+                                'view': view_count,
+                                'comment': comment_count,
+                                'title': title,
+                                'created': int(time.time()),  # 使用当前时间戳，因为无法从HTML准确提取发布时间
+                            })
             except Exception as e:
                 logger.debug(f"解析视频卡片失败: {e}")
                 continue
@@ -334,7 +358,7 @@ async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True
         - "api": 使用bilibili-api-python库 (快速但可能触发412错误)
         - "browser": 使用浏览器模拟 (慢但避免安全风控)
         - "auto": 自动选择 (优先API，失败时切换到浏览器模拟)
-    :param use_fallback: 是否在失败时使用模拟数据回退
+    :param use_fallback: 保留参数以保持兼容性 (已停用模拟数据功能)
     :return: 视频列表 [{"aid": 视频ID, "view": 播放量, "comment": 评论数, "pubdate": 发布日期, "title": 标题, "created": 时间戳}]
     """
     
@@ -347,9 +371,6 @@ async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True
             if mode == "api":
                 # API模式失败时直接抛出错误
                 logger.error(f"API模式获取失败: {error_msg}")
-                if use_fallback and API_REQUEST_CONFIG["enable_fallback"]:
-                    logger.warning("API模式失败，使用模拟数据回退")
-                    return generate_mock_videos(uid, start_date, end_date)
                 raise
             else:
                 # auto模式下，API失败时切换到浏览器模拟
@@ -420,7 +441,7 @@ async def fetch_videos_browser(uid, start_date, end_date, use_fallback=True):
     :param uid: UP主UID (2137589551)
     :param start_date: 起始日期 (YYYY-MM-DD)
     :param end_date: 结束日期 (YYYY-MM-DD)
-    :param use_fallback: 是否在失败时使用模拟数据回退
+    :param use_fallback: 保留参数以保持兼容性 (已停用模拟数据功能)
     :return: 视频列表
     """
     
@@ -488,13 +509,9 @@ async def fetch_videos_browser(uid, start_date, end_date, use_fallback=True):
             else:
                 logger.error("所有重试尝试均失败")
     
-    # 如果启用回退且浏览器模拟失败，使用模拟数据
-    if use_fallback and API_REQUEST_CONFIG["enable_fallback"]:
-        logger.warning(ERROR_MESSAGES["fallback"])
-        return generate_mock_videos(uid, start_date, end_date)
-    
-    # 如果不使用回退，抛出最终错误
-    raise Exception("无法获取视频数据，且未启用回退模式")
+    # 如果所有重试尝试均失败，抛出最终错误
+    logger.error("所有重试尝试均失败")
+    raise Exception("无法获取视频数据")
 
 
 class SecurityControlException(Exception):
@@ -502,50 +519,7 @@ class SecurityControlException(Exception):
     pass
 
 
-def generate_mock_videos(uid, start_date, end_date):
-    """
-    生成模拟视频数据（用于演示）
-    :param uid: UP主UID (2137589551)
-    :param start_date: 起始日期 (YYYY-MM-DD)
-    :param end_date: 结束日期 (YYYY-MM-DD)
-    :return: 视频列表 [{"aid": 视频ID, "view": 播放量, "comment": 评论数, "pubdate": 发布日期, "title": 标题, "created": 时间戳}]
-    """
-    mock_videos = []
-    
-    # 生成一些模拟视频标题
-    mock_titles = [
-        "李大霄：A股迎来黄金坑，牛市起点来了！",
-        "牛市来了！这些股票要涨10倍",
-        "熊市已结束，准备抄底了",
-        "今天是历史性的一天，A股见底了",
-        "婴儿底已现，钻石底不远了",
-        "股民们，春天来了！",
-        "这是千载难逢的投资机会"
-    ]
-    
-    # 解析日期范围
-    start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d")
-    end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d")
-    
-    # 生成3-8个随机视频
-    num_videos = random.randint(3, 8)
-    
-    for i in range(num_videos):
-        # 随机选择发布日期
-        random_days = random.randint(0, (end_dt - start_dt).days)
-        pub_dt = start_dt + datetime.timedelta(days=random_days)
-        
-        mock_videos.append({
-            "aid": 1000000 + i,
-            "view": random.randint(5000, 100000),
-            "comment": random.randint(100, 5000),
-            "pubdate": pub_dt.strftime("%Y-%m-%d"),
-            "title": random.choice(mock_titles),
-            "created": int(pub_dt.timestamp())
-        })
-    
-    logger.info(f"[模拟数据] 生成了 {len(mock_videos)} 个视频")
-    return mock_videos
+
 
 
 def configure_api_settings(**kwargs):
@@ -557,7 +531,6 @@ def configure_api_settings(**kwargs):
     - retry_attempts: 重试次数
     - retry_delay: 重试延迟
     - rate_limit_delay: 请求间隔
-    - enable_fallback: 是否启用模拟数据回退
     """
     for key, value in kwargs.items():
         if key in API_REQUEST_CONFIG:
@@ -586,7 +559,6 @@ def get_api_troubleshooting_info():
         f"- 重试次数: {API_REQUEST_CONFIG.get('retry_attempts', 'N/A')} 次",
         f"- 重试延迟: {API_REQUEST_CONFIG.get('retry_delay', 'N/A')} 秒",
         f"- 请求间隔: {API_REQUEST_CONFIG.get('rate_limit_delay', 'N/A')} 秒",
-        f"- 启用回退: {'是' if API_REQUEST_CONFIG.get('enable_fallback', False) else '否'}",
         "",
         "推荐解决方案:",
         "1. 使用配置工具: python3 api_config_tool.py safe",
@@ -601,7 +573,6 @@ Bilibili 浏览器模拟故障排除指南:
    - 降低请求频率: configure_api_settings(rate_limit_delay=5)  
    - 增加重试延迟: configure_api_settings(retry_delay=10)
    - 减少重试次数: configure_api_settings(retry_attempts=2)
-   - 启用回退模式: configure_api_settings(enable_fallback=True)
 
 2. 网络连接问题:
    - 检查防火墙设置
@@ -616,8 +587,7 @@ Bilibili 浏览器模拟故障排除指南:
        timeout=20,
        retry_attempts=2, 
        retry_delay=10,
-       rate_limit_delay=5,
-       enable_fallback=True
+       rate_limit_delay=5
    )
 
 5. 浏览器模拟特性:
