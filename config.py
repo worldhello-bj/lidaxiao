@@ -41,6 +41,11 @@ API_REQUEST_CONFIG = {
     "trust_env": True,          # 信任环境代理设置
 }
 
+# 历史指数计算配置 (已简化 - 不再使用数学模型)
+
+# 历史计算支持的模式 (现在只使用当前数据近似)
+HISTORICAL_APPROXIMATION_MODE = "current_data_as_historical"
+
 # 错误消息配置
 ERROR_MESSAGES = {
     "412": "触发了Bilibili安全风控策略(412错误)。建议: 1)减少请求频率 2)检查网络环境 3)使用代理",

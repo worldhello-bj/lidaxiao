@@ -92,6 +92,195 @@ def plot_daily_stack(videos, current_date, total_index):
     plt.close()
 
 
+def plot_historical_estimates(historical_data, current_date, model_name="hybrid"):
+    """
+    生成历史指数估算趋势图
+    :param historical_data: 历史估算数据列表 [{"date": "YYYY-MM-DD", "index": float, "estimated": True}]
+    :param current_date: 当前日期 (YYYY-MM-DD)
+    :param model_name: 使用的模型名称
+    """
+    from config import CHART_FIGSIZE_HISTORY
+    
+    if not historical_data:
+        return
+    
+    dates = [item["date"] for item in historical_data]
+    indices = [item["index"] for item in historical_data]
+    
+    plt.figure(figsize=CHART_FIGSIZE_HISTORY)
+    
+    # 绘制历史估算曲线
+    plt.plot(dates, indices, marker='o', linestyle='-', color='orange', 
+             linewidth=2, markersize=4, alpha=0.8, label=f'历史估算 ({model_name}模型)')
+    
+    # 标记当前日期
+    current_index = None
+    for item in historical_data:
+        if item["date"] == current_date:
+            current_index = item["index"]
+            break
+    
+    if current_index:
+        plt.scatter([current_date], [current_index], color='red', s=100, 
+                   zorder=5, label='当前日期', marker='*')
+    
+    plt.title(f"李大霄指数历史回推趋势 (截至 {current_date})")
+    plt.xlabel("日期")
+    plt.ylabel("指数值")
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    
+    date_str = current_date.replace('-', '')
+    filename = f"historical_estimates_{model_name}_{date_str}.png"
+    plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+    
+    return filename
+
+
+def plot_model_comparison(videos, target_date, current_date, models=None):
+    """
+    生成不同模型的历史估算对比图
+    :param videos: 视频数据列表
+    :param target_date: 目标历史日期 (YYYY-MM-DD)
+    :param current_date: 当前日期 (YYYY-MM-DD)
+    :param models: 要比较的模型列表，默认为所有模型
+    """
+    from config import CHART_FIGSIZE_HISTORY
+    from historical import HistoricalCalculator, calculate_batch_historical
+    
+    if models is None:
+        models = ["exponential", "linear", "hybrid"]
+    
+    # 生成日期范围
+    import datetime
+    target_dt = datetime.datetime.strptime(target_date, "%Y-%m-%d").date()
+    current_dt = datetime.datetime.strptime(current_date, "%Y-%m-%d").date()
+    
+    calculator = HistoricalCalculator()
+    date_list = calculator.generate_date_range(target_date, current_date)
+    
+    plt.figure(figsize=CHART_FIGSIZE_HISTORY)
+    
+    colors = {'exponential': 'blue', 'linear': 'green', 'hybrid': 'orange'}
+    model_names = {
+        'exponential': '指数衰减模型',
+        'linear': '线性增长模型', 
+        'hybrid': '混合模型'
+    }
+    
+    for model in models:
+        results = calculate_batch_historical(videos, date_list, current_date, model)
+        dates = [r["date"] for r in results]
+        indices = [r["index"] for r in results]
+        
+        plt.plot(dates, indices, marker='o', linestyle='-', 
+                color=colors.get(model, 'gray'), 
+                linewidth=2, markersize=3, alpha=0.8,
+                label=model_names.get(model, model))
+    
+    plt.title(f"历史指数回推模型对比 ({target_date} 至 {current_date})")
+    plt.xlabel("日期")
+    plt.ylabel("指数值")
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    
+    date_str = current_date.replace('-', '')
+    filename = f"model_comparison_{date_str}.png"
+    plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+    
+    return filename
+
+
+def plot_combined_trend(actual_history, estimated_history, current_date, 
+                       split_date=None, model_name="hybrid"):
+    """
+    生成实际历史数据和估算数据的组合趋势图
+    :param actual_history: 实际历史数据 [{"date": "YYYY-MM-DD", "index": float}]
+    :param estimated_history: 估算历史数据 [{"date": "YYYY-MM-DD", "index": float, "estimated": True}]
+    :param current_date: 当前日期 (YYYY-MM-DD)
+    :param split_date: 实际数据和估算数据的分界日期
+    :param model_name: 估算模型名称
+    """
+    from config import CHART_FIGSIZE_HISTORY
+    
+    plt.figure(figsize=CHART_FIGSIZE_HISTORY)
+    
+    # 绘制实际历史数据
+    if actual_history:
+        actual_dates = [item["date"] for item in actual_history]
+        actual_indices = [item["index"] for item in actual_history]
+        plt.plot(actual_dates, actual_indices, marker='o', linestyle='-', 
+                color='blue', linewidth=2, markersize=4, 
+                label='实际历史数据')
+    
+    # 绘制估算历史数据
+    if estimated_history:
+        est_dates = [item["date"] for item in estimated_history]
+        est_indices = [item["index"] for item in estimated_history]
+        plt.plot(est_dates, est_indices, marker='s', linestyle='--', 
+                color='orange', linewidth=2, markersize=3, alpha=0.7,
+                label=f'估算数据 ({model_name}模型)')
+    
+    # 添加分界线
+    if split_date and actual_history and estimated_history:
+        plt.axvline(x=split_date, color='red', linestyle=':', alpha=0.7, 
+                   label='实际/估算分界')
+    
+    plt.title(f"李大霄指数趋势对比 (截至 {current_date})")
+    plt.xlabel("日期")
+    plt.ylabel("指数值")
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    
+    date_str = current_date.replace('-', '')
+    filename = f"combined_trend_{model_name}_{date_str}.png"
+    plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+    
+    return filename
+
+
+def generate_historical_charts(videos, current_date, historical_data, 
+                             target_date=None, models=None):
+    """
+    生成历史计算相关的所有图表
+    :param videos: 视频数据列表
+    :param current_date: 当前日期 (YYYY-MM-DD)
+    :param historical_data: 历史估算数据
+    :param target_date: 目标历史日期，用于模型对比
+    :param models: 要对比的模型列表
+    :return: 生成的文件名列表
+    """
+    generated_files = []
+    
+    try:
+        # 生成历史估算趋势图
+        if historical_data:
+            model_name = historical_data[0].get("model", "hybrid") if historical_data else "hybrid"
+            filename = plot_historical_estimates(historical_data, current_date, model_name)
+            if filename:
+                generated_files.append(filename)
+        
+        # 生成模型对比图
+        if target_date and videos:
+            filename = plot_model_comparison(videos, target_date, current_date, models)
+            if filename:
+                generated_files.append(filename)
+        
+    except Exception as e:
+        print(f"生成历史图表时发生错误: {e}")
+    
+    return generated_files
+
+
 def generate_all_charts(videos, current_date, total_index, history_data):
     """
     生成所有图表
