@@ -12,7 +12,7 @@ matplotlib.use('Agg')  # Use non-interactive backend for headless environments
 import matplotlib.pyplot as plt
 
 # Configure Chinese font support
-plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial Unicode MS', 'SimHei', 'Microsoft YaHei']
+plt.rcParams['font.sans-serif'] = [ 'SimHei', 'Microsoft YaHei']
 plt.rcParams['axes.unicode_minus'] = False
 
 
