@@ -30,3 +30,21 @@ CHART_FIGSIZE_NO_VIDEO = (8, 5)
 
 # 视频标题截断长度
 TITLE_TRUNCATE_LENGTH = 12
+
+# API 请求配置 (用于处理412安全风控错误)
+API_REQUEST_CONFIG = {
+    "timeout": 10,              # 请求超时时间(秒)
+    "retry_attempts": 3,        # 重试次数
+    "retry_delay": 2,           # 重试延迟(秒)
+    "rate_limit_delay": 1,      # 请求间隔(秒)
+    "enable_fallback": True,    # 启用模拟数据回退
+    "verify_ssl": True,         # SSL验证
+    "trust_env": True,          # 信任环境代理设置
+}
+
+# 错误消息配置
+ERROR_MESSAGES = {
+    "412": "触发了Bilibili安全风控策略(412错误)。建议: 1)减少请求频率 2)检查网络环境 3)使用代理 4)启用回退模式",
+    "network": "网络连接失败。请检查网络连接和防火墙设置",
+    "fallback": "API请求失败，已自动切换到模拟数据模式",
+}

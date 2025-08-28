@@ -36,6 +36,18 @@ python3 lidaxiao.py
 python3 demo.py
 ```
 
+### API Configuration Tool (For 412 Errors)
+```bash
+# Apply safe configuration to reduce 412 errors
+python3 api_config_tool.py safe
+
+# Set proxy if needed
+python3 api_config_tool.py proxy http://your-proxy:port
+
+# Test API connection
+python3 api_config_tool.py test
+```
+
 ## Generated Files / 生成文件
 
 - `YYYY-MM-DD.json`: Daily index data / 单日指数数据
@@ -58,6 +70,8 @@ Total Li Daxiao Index = Sum of all video indices in the past 7 days
 ## Notes / 注意事项
 
 - The production version requires network access to Bilibili API
+- **412 Security Control Error**: If you encounter Bilibili 412 errors, use `python3 api_config_tool.py safe` to apply safe configurations
 - Chinese characters in charts may show font warnings but the functionality works correctly
 - The demo version uses mock data for testing purposes
 - All dates are processed in `YYYY-MM-DD` format
+- See `BILIBILI_412_SOLUTION.md` for detailed troubleshooting of API access issues

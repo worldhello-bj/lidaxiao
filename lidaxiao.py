@@ -12,7 +12,7 @@ import datetime
 import asyncio
 
 from config import BILIBILI_UID, DEFAULT_DAYS_RANGE
-from crawler import fetch_videos
+from crawler import fetch_videos, get_api_troubleshooting_info
 from calculator import calculate_index
 from storage import save_all_data, load_history_data
 from visualizer import generate_all_charts
@@ -53,8 +53,25 @@ async def main():
         print(f"- 单日构成图: index_stack_{d.replace('-', '')}.png")
         
     except Exception as e:
-        print(f"执行过程中发生错误: {e}")
-        print("请检查网络连接和依赖库安装情况")
+        error_msg = str(e)
+        print(f"执行过程中发生错误: {error_msg}")
+        
+        # 提供针对性的错误处理建议
+        if "412" in error_msg or "安全风控" in error_msg:
+            print("\n这是Bilibili安全风控错误。解决建议:")
+            print("1. 减少请求频率，等待一段时间后重试")
+            print("2. 使用代理或VPN")
+            print("3. 检查网络环境")
+            print("4. 运行demo.py使用模拟数据")
+        elif "address associated with hostname" in error_msg:
+            print("\n这是网络连接问题。解决建议:")
+            print("1. 检查网络连接")
+            print("2. 检查防火墙设置") 
+            print("3. 尝试使用代理")
+            print("4. 运行demo.py使用模拟数据")
+        
+        print(f"\n详细故障排除信息:")
+        print(get_api_troubleshooting_info())
 
 
 if __name__ == "__main__":
