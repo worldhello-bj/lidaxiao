@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-视频数据爬取模块 (浏览器模拟版本)
-Video Crawling Module (Browser Simulation Version)
+视频数据爬取模块 (支持API和浏览器模拟两种模式)
+Video Crawling Module (Supports both API and Browser Simulation modes)
 
-This module handles fetching video data from Bilibili using browser simulation
-instead of direct API calls to avoid 412 security control errors.
+This module handles fetching video data from Bilibili using either:
+1. Direct API calls (bilibili-api-python library) - faster but may trigger 412 errors
+2. Browser simulation (requests + BeautifulSoup) - slower but avoids 412 security control
 """
 
 import requests
@@ -18,6 +19,13 @@ import logging
 import time
 import re
 from config import API_REQUEST_CONFIG, ERROR_MESSAGES
+
+try:
+    from bilibili_api import user
+    API_MODE_AVAILABLE = True
+except ImportError:
+    API_MODE_AVAILABLE = False
+    logging.warning("bilibili-api-python not available, only browser simulation mode will work")
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -140,23 +148,112 @@ class BrowserSimulator:
         return videos
 
 
-async def fetch_videos(uid, start_date, end_date, use_fallback=True):
+async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True):
     """
-    使用浏览器模拟方式获取指定日期范围内的视频数据
+    获取指定日期范围内的视频数据 (支持API和浏览器模拟两种模式)
+    :param uid: UP主UID (2137589551)
+    :param start_date: 起始日期 (YYYY-MM-DD)
+    :param end_date: 结束日期 (YYYY-MM-DD)
+    :param mode: 获取模式 ("api", "browser", "auto")
+        - "api": 使用bilibili-api-python库 (快速但可能触发412错误)
+        - "browser": 使用浏览器模拟 (慢但避免安全风控)
+        - "auto": 自动选择 (优先API，失败时切换到浏览器模拟)
+    :param use_fallback: 是否在失败时使用模拟数据回退
+    :return: 视频列表 [{"aid": 视频ID, "view": 播放量, "comment": 评论数, "pubdate": 发布日期, "title": 标题, "created": 时间戳}]
+    """
+    
+    if mode == "api" or (mode == "auto" and API_MODE_AVAILABLE):
+        try:
+            logger.info(f"开始使用API模式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
+            return await fetch_videos_api(uid, start_date, end_date)
+        except Exception as e:
+            error_msg = str(e)
+            if mode == "api":
+                # API模式失败时直接抛出错误
+                logger.error(f"API模式获取失败: {error_msg}")
+                if use_fallback and API_REQUEST_CONFIG["enable_fallback"]:
+                    logger.warning("API模式失败，使用模拟数据回退")
+                    return generate_mock_videos(uid, start_date, end_date)
+                raise
+            else:
+                # auto模式下，API失败时切换到浏览器模拟
+                logger.warning(f"API模式失败: {error_msg}，切换到浏览器模拟模式")
+                return await fetch_videos_browser(uid, start_date, end_date, use_fallback)
+    
+    elif mode == "browser" or mode == "auto":
+        logger.info(f"开始使用浏览器模拟方式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
+        return await fetch_videos_browser(uid, start_date, end_date, use_fallback)
+    
+    else:
+        raise ValueError(f"不支持的模式: {mode}. 支持的模式: 'api', 'browser', 'auto'")
+
+
+async def fetch_videos_api(uid, start_date, end_date):
+    """
+    使用bilibili-api-python库获取视频数据 (传统API模式)
+    :param uid: UP主UID (2137589551)
+    :param start_date: 起始日期 (YYYY-MM-DD)
+    :param end_date: 结束日期 (YYYY-MM-DD)
+    :return: 视频列表
+    """
+    if not API_MODE_AVAILABLE:
+        raise ImportError("bilibili-api-python库不可用，请安装或使用浏览器模拟模式")
+    
+    u = user.User(uid)
+    all_videos = []
+    pn = 1
+    
+    logger.info("使用API模式获取视频数据...")
+    
+    while True:
+        try:
+            # 调用B站API获取分页视频列表
+            res = await u.get_videos(pn=pn, order=user.VideoOrder.PUBDATE)
+            if not res["list"]["vlist"]:
+                break
+                
+            for video_info in res["list"]["vlist"]:
+                pubdate = datetime.datetime.fromtimestamp(video_info["created"]).strftime("%Y-%m-%d")
+                # 仅保留指定日期范围内的视频
+                if start_date <= pubdate <= end_date:
+                    all_videos.append({
+                        "aid": video_info["aid"],
+                        "view": int(video_info["play"]),
+                        "comment": int(video_info["comment"]),
+                        "pubdate": pubdate,
+                        "title": video_info["title"],
+                        "created": video_info["created"]
+                    })
+            pn += 1
+            
+            # 添加请求间隔，避免触发风控
+            await asyncio.sleep(API_REQUEST_CONFIG.get("rate_limit_delay", 1))
+            
+        except Exception as e:
+            if "412" in str(e) or "安全风控" in str(e):
+                raise SecurityControlException(f"API模式触发安全风控: {e}")
+            raise
+    
+    logger.info(f"API模式成功获取 {len(all_videos)} 个视频")
+    return all_videos
+
+
+async def fetch_videos_browser(uid, start_date, end_date, use_fallback=True):
+    """
+    使用浏览器模拟方式获取视频数据
     :param uid: UP主UID (2137589551)
     :param start_date: 起始日期 (YYYY-MM-DD)
     :param end_date: 结束日期 (YYYY-MM-DD)
     :param use_fallback: 是否在失败时使用模拟数据回退
-    :return: 视频列表 [{"aid": 视频ID, "view": 播放量, "comment": 评论数, "pubdate": 发布日期, "title": 标题, "created": 时间戳}]
+    :return: 视频列表
     """
-    logger.info(f"开始使用浏览器模拟方式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
     
     browser = BrowserSimulator()
     all_videos = []
     
     for attempt in range(API_REQUEST_CONFIG["retry_attempts"]):
         try:
-            logger.info(f"第 {attempt + 1} 次尝试获取视频数据...")
+            logger.info(f"浏览器模拟模式 - 第 {attempt + 1} 次尝试获取视频数据...")
             
             page = 1
             max_pages = 5  # 最多获取5页数据，避免过度爬取
@@ -195,7 +292,7 @@ async def fetch_videos(uid, start_date, end_date, use_fallback=True):
                     break
             
             if all_videos:
-                logger.info(f"成功获取到 {len(all_videos)} 个符合条件的视频")
+                logger.info(f"浏览器模拟模式成功获取到 {len(all_videos)} 个符合条件的视频")
                 return all_videos
             else:
                 raise Exception("未获取到任何视频数据")
@@ -296,8 +393,31 @@ def configure_api_settings(**kwargs):
 
 def get_api_troubleshooting_info():
     """
-    返回浏览器模拟故障排除信息
+    返回API故障排除信息 (支持两种模式)
     """
+    info = [
+        "=== 李大霄指数计算程序故障排除信息 ===",
+        f"当前时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"bilibili-api-python可用: {'是' if API_MODE_AVAILABLE else '否'}",
+        "",
+        "支持的获取模式:",
+        "1. API模式 (api): 使用bilibili-api-python库，速度快但可能触发412错误",
+        "2. 浏览器模拟模式 (browser): 使用HTTP请求模拟浏览器，慢但避免风控",
+        "3. 自动模式 (auto): 优先使用API，失败时自动切换到浏览器模拟",
+        "",
+        "当前配置:",
+        f"- 超时时间: {API_REQUEST_CONFIG.get('timeout', 'N/A')} 秒",
+        f"- 重试次数: {API_REQUEST_CONFIG.get('retry_attempts', 'N/A')} 次",
+        f"- 重试延迟: {API_REQUEST_CONFIG.get('retry_delay', 'N/A')} 秒",
+        f"- 请求间隔: {API_REQUEST_CONFIG.get('rate_limit_delay', 'N/A')} 秒",
+        f"- 启用回退: {'是' if API_REQUEST_CONFIG.get('enable_fallback', False) else '否'}",
+        "",
+        "推荐解决方案:",
+        "1. 使用配置工具: python3 api_config_tool.py safe",
+        "2. 尝试浏览器模拟模式: python3 lidaxiao.py --mode browser",
+        "3. 使用演示数据: python3 demo.py"
+    ]
+    return "\n".join(info)
     return f"""
 Bilibili 浏览器模拟故障排除指南:
 
