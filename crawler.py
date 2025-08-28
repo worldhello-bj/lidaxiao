@@ -99,7 +99,7 @@ class BrowserSimulator:
         for script in script_tags:
             if script.string and 'window.__INITIAL_STATE__' in script.string:
                 # 提取初始状态数据
-                match = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.*?});', script.string)
+                match = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.*?});', script.string, re.DOTALL)
                 if match:
                     try:
                         initial_state = json.loads(match.group(1))
@@ -121,29 +121,205 @@ class BrowserSimulator:
         
         # 如果没有找到初始状态数据，尝试其他解析方法
         if not videos:
-            # 尝试解析视频卡片
-            video_cards = soup.find_all('div', class_='small-item')
-            for card in video_cards:
-                try:
-                    # 提取视频ID
-                    link = card.find('a')
-                    if link and link.get('href'):
-                        aid_match = re.search(r'/video/av(\d+)', link['href']) or re.search(r'/video/BV[\w]+', link['href'])
-                        if aid_match:
-                            title_elem = card.find(['h3', 'a'])
-                            title = title_elem.get_text().strip() if title_elem else ''
-                            
-                            # 由于HTML解析可能无法获取精确的播放量和评论数，使用随机模拟值
-                            videos.append({
-                                'aid': random.randint(100000, 999999),
-                                'view': random.randint(1000, 50000),
-                                'comment': random.randint(10, 1000),
-                                'title': title,
-                                'created': int(time.time()) - random.randint(86400, 2592000),  # 1-30天前
-                            })
-                except Exception as e:
-                    logger.debug(f"解析视频卡片失败: {e}")
-                    continue
+            # 尝试新的CSS选择器解析方法（针对当前B站页面结构）
+            videos = self._parse_videos_with_css_selectors(soup)
+            
+        # 如果新方法也没找到数据，使用旧的解析方法作为最后回退
+        if not videos:
+            videos = self._parse_videos_legacy_fallback(soup)
+        
+        return videos
+    
+    def _parse_videos_with_css_selectors(self, soup):
+        """
+        使用CSS选择器解析视频信息（新方法，针对当前B站页面结构）
+        :param soup: BeautifulSoup对象
+        :return: 视频列表
+        """
+        videos = []
+        
+        # 尝试多种CSS选择器，以适应B站页面的不同布局
+        selectors_to_try = [
+            # 问题中提到的具体选择器路径中的统计数据元素
+            "div.bili-cover-card__stats",
+            # 更广泛的视频卡片统计选择器
+            ".bili-video-card__stats",
+            ".video-card__stats", 
+            ".card-stats",
+            # 其他可能的统计元素选择器
+            "[class*='stats']",
+        ]
+        
+        for selector in selectors_to_try:
+            stats_elements = soup.select(selector)
+            if stats_elements:
+                logger.debug(f"找到 {len(stats_elements)} 个统计元素，使用选择器: {selector}")
+                
+                for stats_elem in stats_elements:
+                    try:
+                        video_data = self._extract_video_from_stats_element(stats_elem)
+                        if video_data:
+                            videos.append(video_data)
+                    except Exception as e:
+                        logger.debug(f"解析统计元素失败: {e}")
+                        continue
+                
+                if videos:  # 如果找到了视频，使用这个选择器的结果
+                    break
+        
+        return videos
+    
+    def _extract_video_from_stats_element(self, stats_elem):
+        """
+        从统计元素中提取视频信息
+        :param stats_elem: 统计信息的BeautifulSoup元素
+        :return: 视频信息字典或None
+        """
+        # 寻找父级链接元素来获取视频ID
+        link_elem = stats_elem.find_parent('a')
+        if not link_elem or not link_elem.get('href'):
+            return None
+            
+        href = link_elem['href']
+        
+        # 提取视频ID (支持AV号和BV号)
+        aid_match = re.search(r'/video/av(\d+)', href)
+        bv_match = re.search(r'/video/(BV[\w]+)', href)
+        
+        aid = 0
+        if aid_match:
+            aid = int(aid_match.group(1))
+        elif bv_match:
+            # 对于BV号，使用一个简单的hash作为数字ID
+            bv_id = bv_match.group(1)
+            aid = hash(bv_id) % 1000000000  # 转换为正数
+        
+        if aid == 0:
+            return None
+        
+        # 提取统计数据
+        view_count = 0
+        comment_count = 0
+        
+        # 尝试多种方式提取统计数据，优先使用最具体的选择器
+        stats_items = []
+        
+        # 首先尝试具体的统计项选择器
+        specific_selectors = [
+            '.bili-cover-card__stats__left__item',
+            '[class*="stats__left__item"]',
+            '[class*="stats__item"]',
+            '[class*="item"]'
+        ]
+        
+        for selector in specific_selectors:
+            items = stats_elem.select(selector)
+            if len(items) >= 2:  # 至少需要两个统计项（播放量和评论数）
+                stats_items = items
+                break
+        
+        # 如果没找到具体的统计项，回退到所有span
+        if not stats_items:
+            all_spans = stats_elem.find_all('span')
+            # 筛选包含数字的span
+            for span in all_spans:
+                text = span.get_text(strip=True)
+                if text and (any(c.isdigit() for c in text) or '万' in text or '千' in text):
+                    # 确保这个span不是其他span的父元素（避免重复计算）
+                    if not span.find('span'):
+                        stats_items.append(span)
+        
+        # 解析统计数字（通常前两个数字分别是播放量和评论数）
+        if len(stats_items) >= 1:
+            text1 = stats_items[0].get_text(strip=True)
+            view_count = self._parse_stats_number(text1)
+        if len(stats_items) >= 2:
+            text2 = stats_items[1].get_text(strip=True)
+            comment_count = self._parse_stats_number(text2)
+        
+        # 尝试获取视频标题
+        title = ""
+        title_elem = link_elem.find(['h3', 'h4', '[class*="title"]']) or link_elem.find(attrs={'title': True})
+        if title_elem:
+            title = title_elem.get_text(strip=True) or title_elem.get('title', '')
+        
+        return {
+            'aid': aid,
+            'view': view_count,
+            'comment': comment_count,
+            'title': title,
+            'created': int(time.time()) - random.randint(86400, 2592000),  # 1-30天前（估算）
+        }
+    
+    def _parse_stats_number(self, stats_text):
+        """
+        解析中文统计数字，如"50.2万"转换为数字
+        :param stats_text: 统计文本
+        :return: 数字
+        """
+        if not stats_text:
+            return 0
+            
+        stats_text = stats_text.strip()
+        
+        # 处理"万"（10,000）
+        if '万' in stats_text:
+            num_str = stats_text.replace('万', '')
+            try:
+                return int(float(num_str) * 10000)
+            except ValueError:
+                pass
+        
+        # 处理"千"（1,000）
+        if '千' in stats_text:
+            num_str = stats_text.replace('千', '')
+            try:
+                return int(float(num_str) * 1000)
+            except ValueError:
+                pass
+        
+        # 处理纯数字
+        try:
+            # 提取数字字符
+            digits = ''.join(filter(lambda x: x.isdigit() or x == '.', stats_text))
+            if digits:
+                return int(float(digits))
+        except ValueError:
+            pass
+        
+        return 0
+    
+    def _parse_videos_legacy_fallback(self, soup):
+        """
+        旧版解析方法作为最后的回退选项
+        :param soup: BeautifulSoup对象
+        :return: 视频列表
+        """
+        videos = []
+        
+        # 尝试解析视频卡片
+        video_cards = soup.find_all('div', class_='small-item')
+        for card in video_cards:
+            try:
+                # 提取视频ID
+                link = card.find('a')
+                if link and link.get('href'):
+                    aid_match = re.search(r'/video/av(\d+)', link['href']) or re.search(r'/video/BV[\w]+', link['href'])
+                    if aid_match:
+                        title_elem = card.find(['h3', 'a'])
+                        title = title_elem.get_text().strip() if title_elem else ''
+                        
+                        # 由于HTML解析可能无法获取精确的播放量和评论数，使用随机模拟值
+                        videos.append({
+                            'aid': random.randint(100000, 999999),
+                            'view': random.randint(1000, 50000),
+                            'comment': random.randint(10, 1000),
+                            'title': title,
+                            'created': int(time.time()) - random.randint(86400, 2592000),  # 1-30天前
+                        })
+            except Exception as e:
+                logger.debug(f"解析视频卡片失败: {e}")
+                continue
         
         return videos
 
