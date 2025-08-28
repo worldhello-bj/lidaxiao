@@ -21,7 +21,7 @@ from config import BILIBILI_UID, DEFAULT_DAYS_RANGE, HISTORICAL_MODELS
 from crawler import fetch_videos, get_api_troubleshooting_info
 from calculator import calculate_index
 from storage import save_all_data, load_history_data
-from visualizer import generate_all_charts
+from visualizer import generate_all_charts, generate_historical_charts
 from historical import calculate_historical_index, calculate_batch_historical, HistoricalCalculator
 
 
@@ -153,6 +153,16 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
             json.dump(results, f, indent=2, ensure_ascii=False)
         print(f"\n批量结果已保存到: {filename}")
         
+        # 生成可视化图表
+        print("正在生成历史趋势图表...")
+        chart_files = generate_historical_charts(
+            videos, current_date, results, target_date=start_date
+        )
+        if chart_files:
+            print("生成的图表文件:")
+            for chart_file in chart_files:
+                print(f"- {chart_file}")
+        
     except Exception as e:
         print(f"批量计算失败: {e}")
 
@@ -203,6 +213,17 @@ async def calculate_default_historical_range(videos, args, current_date, current
         with open(filename, "w", encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
         print(f"\n历史数据已保存到: {filename}")
+        
+        # 生成可视化图表
+        print("正在生成历史趋势图表...")
+        week_ago = (datetime.date.today() - datetime.timedelta(days=6)).strftime("%Y-%m-%d")
+        chart_files = generate_historical_charts(
+            videos, current_date, results, target_date=week_ago
+        )
+        if chart_files:
+            print("生成的图表文件:")
+            for chart_file in chart_files:
+                print(f"- {chart_file}")
         
     except Exception as e:
         print(f"默认历史计算失败: {e}")

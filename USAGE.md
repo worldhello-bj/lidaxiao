@@ -20,9 +20,12 @@ This project implements a Li Daxiao Index calculation program that crawls Bilibi
 - **Use case**: Production environments / 生产环境
 - **Documentation**: [Browser Mode Guide](BROWSER_MODE_GUIDE.md) / [浏览器模式指南](BROWSER_MODE_GUIDE.md)
 
-### 🤖 Auto Mode (智能模式)
-- **Behavior**: Tries API first, falls back to browser simulation / 优先API，失败时切换到浏览器模拟
-- **Use case**: General usage / 通用场景
+### 🔄 Historical Calculation Mode (历史回推模式)
+- **Speed**: Medium / 速度中等
+- **Purpose**: Estimate historical index values from current data / 从当前数据估算历史指数值
+- **Models**: Exponential decay, Linear growth, Hybrid / 指数衰减、线性增长、混合模型
+- **Use case**: Historical analysis and trend prediction / 历史分析和趋势预测
+- **Documentation**: [Historical Calculation Guide](HISTORICAL_GUIDE.md) / [历史计算指南](HISTORICAL_GUIDE.md)
 
 ## Features / 功能特性
 
@@ -83,6 +86,31 @@ python3 api_config_tool.py custom
 ```bash
 # Use mock data for testing / 使用模拟数据测试
 python3 demo.py
+
+# Historical calculation demo / 历史计算功能演示  
+python3 demo_historical.py
+
+# Visualization demo / 可视化功能演示
+python3 demo_visualization.py
+```
+
+### Historical Calculation Mode / 历史计算模式
+```bash
+# Enable historical calculation mode / 启用历史计算模式
+python3 lidaxiao.py --historical
+
+# Calculate specific historical date / 计算特定历史日期
+python3 lidaxiao.py --historical --target-date 2024-08-20
+
+# Batch calculation for date range / 批量计算日期范围
+python3 lidaxiao.py --historical --date-range 2024-08-15,2024-08-25
+
+# Use different models / 使用不同模型
+python3 lidaxiao.py --historical --historical-model linear
+python3 lidaxiao.py --historical --historical-model hybrid
+
+# Custom parameters / 自定义参数
+python3 lidaxiao.py --historical --decay-rate 0.08 --growth-rate 0.03
 ```
 
 ## Mode Selection Guide / 模式选择指南
@@ -99,17 +127,30 @@ python3 demo.py
 - ✅ Restricted network environments / 受限网络环境
 - ✅ Want to avoid anti-bot detection / 希望避免反机器人检测
 
-### When to use Auto Mode / 何时使用自动模式
-- ✅ General usage / 一般使用场景
-- ✅ Unsure about network conditions / 不确定网络条件
-- ✅ Want best of both worlds / 希望兼得两种模式优势
+### 🤖 Auto Mode (智能模式)
+- **Behavior**: Tries API first, falls back to browser simulation / 优先API，失败时切换到浏览器模拟
+- **Use case**: General usage / 通用场景
+
+### When to use Historical Calculation Mode / 何时使用历史回推模式
+- ✅ Need to estimate historical index values / 需要估算历史指数值
+- ✅ Historical trend analysis / 历史趋势分析  
+- ✅ Model comparison and validation / 模型对比和验证
+- ✅ Research and academic studies / 研究和学术分析
 
 ## Generated Files / 生成文件
 
+### Standard Mode Files / 标准模式文件
 - `YYYY-MM-DD.json`: Daily index data / 单日指数数据
 - `history.json`: Historical index data / 历史指数数据  
 - `index_history_YYYYMMDD.png`: Historical trend chart / 历史趋势图
 - `index_stack_YYYYMMDD.png`: Daily contribution chart / 单日贡献图
+
+### Historical Calculation Mode Files / 历史计算模式文件
+- `historical_batch_START_END.json`: Batch calculation results / 批量计算结果
+- `historical_week_DATE.json`: Weekly historical data / 周期历史数据
+- `historical_estimates_MODEL_DATE.png`: Historical trend chart / 历史趋势图
+- `model_comparison_DATE.png`: Model comparison chart / 模型对比图
+- `combined_trend_MODEL_DATE.png`: Combined trend chart / 组合趋势图
 
 ## Dependencies / 依赖库
 
@@ -166,6 +207,7 @@ python3 api_config_tool.py proxy http://your-proxy:port
 
 - **[API Mode Guide](API_MODE_GUIDE.md)**: Complete guide for API mode usage / API模式完整使用指南
 - **[Browser Mode Guide](BROWSER_MODE_GUIDE.md)**: Complete guide for browser simulation mode / 浏览器模拟模式完整使用指南  
+- **[Historical Calculation Guide](HISTORICAL_GUIDE.md)**: Complete guide for historical index calculation / 历史指数计算完整使用指南
 - **[Configuration Tool Guide](BILIBILI_412_SOLUTION.md)**: Configuration and troubleshooting / 配置和故障排除指南
 
 ## Notes / 注意事项
