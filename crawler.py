@@ -348,22 +348,12 @@ class PlaywrightBrowserSimulator:
     def _extract_publish_timestamp(self, card):
         """从视频卡片提取发布时间戳"""
         try:
-            # 寻找时间相关的元素
-            time_patterns = [
-                # 寻找包含日期的元素
-                r'(\d{4}-\d{1,2}-\d{1,2})',  # YYYY-MM-DD format
-                r'(\d{1,2}-\d{1,2})',        # MM-DD format
-                r'(\d{4}/\d{1,2}/\d{1,2})',  # YYYY/MM/DD format
-                r'(\d{1,2}/\d{1,2})',        # MM/DD format
-                r'(\d+天前)',                 # X天前
-                r'(\d+小时前)',               # X小时前
-                r'(\d+分钟前)',               # X分钟前
-                r'(\d+个月前)',               # X个月前
-                r'(\d+年前)',                 # X年前
-            ]
-            
-            # 查找时间元素的选择器
-            time_selectors = [
+            # 优先使用B站具体的时间显示位置选择器
+            bilibili_time_selectors = [
+                # B站视频卡片的subtitle区域（用户提供的具体选择器）
+                '.bili-video-card__subtitle',
+                '.bili-video-card__details .bili-video-card__subtitle',
+                # 其他常见的时间选择器
                 'span[title]',  # 带title属性的span
                 '.time',        # class包含time的元素
                 '.date',        # class包含date的元素
@@ -374,7 +364,7 @@ class PlaywrightBrowserSimulator:
             ]
             
             # 遍历时间选择器寻找时间信息
-            for selector in time_selectors:
+            for selector in bilibili_time_selectors:
                 time_elements = card.select(selector)
                 for elem in time_elements:
                     # 检查title属性
@@ -382,13 +372,16 @@ class PlaywrightBrowserSimulator:
                     if title_text:
                         timestamp = self._parse_time_string(title_text)
                         if timestamp > 0:
+                            logger.debug(f"从title属性提取时间戳: {title_text} -> {timestamp}")
                             return timestamp
                     
                     # 检查data-time属性
                     data_time = elem.get('data-time', '')
                     if data_time:
                         try:
-                            return int(data_time)
+                            timestamp = int(data_time)
+                            logger.debug(f"从data-time属性提取时间戳: {data_time}")
+                            return timestamp
                         except ValueError:
                             pass
                     
@@ -397,15 +390,30 @@ class PlaywrightBrowserSimulator:
                     if text_content:
                         timestamp = self._parse_time_string(text_content)
                         if timestamp > 0:
+                            logger.debug(f"从文本内容提取时间戳: {text_content} -> {timestamp}")
                             return timestamp
             
             # 如果没有找到具体时间，在整个卡片中搜索时间模式
+            time_patterns = [
+                # B站时间格式模式（处理格式不统一问题）
+                r'(\d+小时前)',               # X小时前（24小时内）
+                r'(\d+分钟前)',               # X分钟前
+                r'(\d+天前)',                 # X天前
+                r'(\d{1,2}-\d{1,2})',        # MM-DD format（24小时外）
+                r'(\d{4}-\d{1,2}-\d{1,2})',  # YYYY-MM-DD format
+                r'(\d{4}/\d{1,2}/\d{1,2})',  # YYYY/MM/DD format
+                r'(\d{1,2}/\d{1,2})',        # MM/DD format
+                r'(\d+个月前)',               # X个月前
+                r'(\d+年前)',                 # X年前
+            ]
+            
             card_text = card.get_text()
             for pattern in time_patterns:
                 match = re.search(pattern, card_text)
                 if match:
                     timestamp = self._parse_time_string(match.group(1))
                     if timestamp > 0:
+                        logger.debug(f"从卡片文本提取时间戳: {match.group(1)} -> {timestamp}")
                         return timestamp
             
         except Exception as e:
@@ -416,57 +424,101 @@ class PlaywrightBrowserSimulator:
         return int(time.time())
     
     def _parse_time_string(self, time_str):
-        """解析时间字符串为时间戳"""
+        """
+        解析时间字符串为时间戳
+        处理B站时间显示的格式不统一问题：
+        - 24小时内：显示小时格式（如"2小时前"）
+        - 24小时外：显示日期格式（如"01-15"）
+        """
         try:
             current_time = datetime.datetime.now()
+            time_str = time_str.strip()
             
-            # 处理相对时间格式
-            if '天前' in time_str:
-                days = int(re.search(r'(\d+)天前', time_str).group(1))
-                target_time = current_time - datetime.timedelta(days=days)
-                return int(target_time.timestamp())
-            elif '小时前' in time_str:
-                hours = int(re.search(r'(\d+)小时前', time_str).group(1))
-                target_time = current_time - datetime.timedelta(hours=hours)
-                return int(target_time.timestamp())
+            # 处理相对时间格式（24小时内常见）
+            if '小时前' in time_str:
+                hours_match = re.search(r'(\d+)小时前', time_str)
+                if hours_match:
+                    hours = int(hours_match.group(1))
+                    target_time = current_time - datetime.timedelta(hours=hours)
+                    return int(target_time.timestamp())
             elif '分钟前' in time_str:
-                minutes = int(re.search(r'(\d+)分钟前', time_str).group(1))
-                target_time = current_time - datetime.timedelta(minutes=minutes)
-                return int(target_time.timestamp())
+                minutes_match = re.search(r'(\d+)分钟前', time_str)
+                if minutes_match:
+                    minutes = int(minutes_match.group(1))
+                    target_time = current_time - datetime.timedelta(minutes=minutes)
+                    return int(target_time.timestamp())
+            elif '天前' in time_str:
+                days_match = re.search(r'(\d+)天前', time_str)
+                if days_match:
+                    days = int(days_match.group(1))
+                    target_time = current_time - datetime.timedelta(days=days)
+                    return int(target_time.timestamp())
             elif '个月前' in time_str:
-                months = int(re.search(r'(\d+)个月前', time_str).group(1))
-                target_time = current_time - datetime.timedelta(days=months * 30)  # 近似处理
-                return int(target_time.timestamp())
+                months_match = re.search(r'(\d+)个月前', time_str)
+                if months_match:
+                    months = int(months_match.group(1))
+                    target_time = current_time - datetime.timedelta(days=months * 30)  # 近似处理
+                    return int(target_time.timestamp())
             elif '年前' in time_str:
-                years = int(re.search(r'(\d+)年前', time_str).group(1))
-                target_time = current_time - datetime.timedelta(days=years * 365)  # 近似处理
-                return int(target_time.timestamp())
+                years_match = re.search(r'(\d+)年前', time_str)
+                if years_match:
+                    years = int(years_match.group(1))
+                    target_time = current_time - datetime.timedelta(days=years * 365)  # 近似处理
+                    return int(target_time.timestamp())
             
-            # 处理绝对时间格式
+            # 处理绝对时间格式（24小时外常见，格式不统一问题的核心）
             date_formats = [
+                # B站常见的日期格式
                 '%Y-%m-%d %H:%M:%S',  # 2024-01-01 12:00:00
                 '%Y-%m-%d %H:%M',     # 2024-01-01 12:00
                 '%Y-%m-%d',           # 2024-01-01
                 '%Y/%m/%d %H:%M:%S',  # 2024/01/01 12:00:00
                 '%Y/%m/%d %H:%M',     # 2024/01/01 12:00
                 '%Y/%m/%d',           # 2024/01/01
-                '%m-%d %H:%M',        # 01-01 12:00 (当年)
-                '%m-%d',              # 01-01 (当年)
-                '%m/%d %H:%M',        # 01/01 12:00 (当年)
-                '%m/%d',              # 01/01 (当年)
+                # 只有月日的格式（B站24小时外常用）
+                '%m-%d %H:%M',        # 01-15 12:00 (当年)
+                '%m-%d',              # 01-15 (当年，B站常见格式)
+                '%m/%d %H:%M',        # 01/15 12:00 (当年)
+                '%m/%d',              # 01/15 (当年)
             ]
             
             for fmt in date_formats:
                 try:
                     if '%Y' not in fmt:
-                        # 对于没有年份的格式，假设是当年
-                        time_str_with_year = f"{current_time.year}-{time_str}" if '%m-%d' in fmt or '%m/%d' in fmt else time_str
-                        parsed_time = datetime.datetime.strptime(time_str_with_year, f"%Y-{fmt}")
+                        # 处理没有年份的格式（B站格式不统一的重点）
+                        # 假设是当年，但需要考虑跨年情况
+                        if '%m-%d' in fmt:
+                            # 处理 "01-15" 格式
+                            parsed_time = datetime.datetime.strptime(f"{current_time.year}-{time_str}", f"%Y-{fmt}")
+                        elif '%m/%d' in fmt:
+                            # 处理 "01/15" 格式
+                            parsed_time = datetime.datetime.strptime(f"{current_time.year}-{time_str.replace('/', '-')}", f"%Y-%m-%d")
+                        else:
+                            parsed_time = datetime.datetime.strptime(time_str, fmt)
+                        
+                        # 如果解析的日期是未来的日期，那么应该是去年的
+                        if parsed_time > current_time:
+                            parsed_time = parsed_time.replace(year=current_time.year - 1)
+                        
                     else:
                         parsed_time = datetime.datetime.strptime(time_str, fmt)
+                    
                     return int(parsed_time.timestamp())
                 except ValueError:
                     continue
+            
+            # 尝试提取纯数字日期格式
+            date_match = re.search(r'(\d{1,2})-(\d{1,2})', time_str)
+            if date_match:
+                month, day = int(date_match.group(1)), int(date_match.group(2))
+                try:
+                    parsed_time = datetime.datetime(current_time.year, month, day)
+                    # 如果是未来日期，则认为是去年
+                    if parsed_time > current_time:
+                        parsed_time = parsed_time.replace(year=current_time.year - 1)
+                    return int(parsed_time.timestamp())
+                except ValueError:
+                    pass
                     
         except Exception as e:
             logger.debug(f"解析时间字符串失败 '{time_str}': {e}")
