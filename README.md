@@ -1,4 +1,40 @@
 # lidaxiao
+# 李大霄指数计算程序
+
+## 🆕 新功能：Playwright模式 
+
+### 支持的获取模式
+
+1. **API模式** (`--mode api`): 使用bilibili-api-python库，速度快但可能触发412错误
+2. **浏览器模拟模式** (`--mode browser`): 使用HTTP请求模拟浏览器，慢但避免风控  
+3. **🎭 Playwright模式** (`--mode playwright`): 使用真实浏览器自动化，最强反检测能力
+4. **自动模式** (`--mode auto`): 智能选择最佳模式
+
+### 快速开始
+
+```bash
+# 基本使用
+python3 lidaxiao.py --mode playwright
+
+# 历史计算
+python3 lidaxiao.py --mode playwright --historical --target-date 2024-01-15
+
+# 演示Playwright功能
+python3 demo_playwright.py
+```
+
+### Playwright模式特性
+
+- 🛡️ **最强反检测**: 使用真实浏览器内核，完全模拟人类用户
+- 🤖 **智能等待**: 自动等待页面加载和元素出现
+- 🌐 **动态内容**: 完美处理JavaScript渲染的内容
+- 📱 **真实行为**: 模拟真实用户的浏览行为
+- ⚡ **懒加载**: 自动滚动触发内容加载
+
+📖 **详细文档**: [PLAYWRIGHT_MODE_GUIDE.md](PLAYWRIGHT_MODE_GUIDE.md)
+
+---
+
 # 李大霄指数计算程序需求框架
 
 ## 1. 爬虫部分实现

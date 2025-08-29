@@ -28,10 +28,20 @@ async def main():
     print("[注意] 使用真实数据进行计算")
     
     try:
-        # 获取真实数据
+        # 获取真实数据 - 尝试使用Playwright模式，失败则显示错误
         print("正在获取视频数据...")
-        videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=d, mode="browser")
-        print(f"获取到 {len(videos)} 个视频")
+        try:
+            videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=d, mode="playwright")
+            print(f"✅ Playwright模式获取到 {len(videos)} 个视频")
+        except Exception as e:
+            print(f"⚠️ Playwright模式失败: {e}")
+            print("🔄 尝试API模式...")
+            try:
+                videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=d, mode="api")
+                print(f"✅ API模式获取到 {len(videos)} 个视频")
+            except Exception as e2:
+                print(f"❌ API模式也失败: {e2}")
+                raise Exception("所有获取模式均失败")
         
         if not videos:
             print("❌ 未获取到任何视频数据")
