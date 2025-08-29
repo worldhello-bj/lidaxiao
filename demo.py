@@ -1,94 +1,225 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-李大霄指数计算程序 - 演示版本
-Li Daxiao Index Calculation Program - Demo Version
+李大霄指数计算程序 - 演示脚本
+Li Daxiao Index Calculation Program - Demo Script
 
-This program demonstrates the Li Daxiao index calculation using real data.
-If data cannot be fetched, it will show proper error messages instead of using mock data.
+完整演示程序各种模式的使用方法和功能特性。
 """
 
 import datetime
 import asyncio
-
 from config import BILIBILI_UID, DEFAULT_DAYS_RANGE
-from crawler import fetch_videos
-from calculator import calculate_index, get_video_details
+from crawler import fetch_videos, PLAYWRIGHT_AVAILABLE
+from calculator import calculate_index
 from storage import save_all_data, load_history_data
 from visualizer import generate_all_charts
 
-
-async def main():
-    # 获取当前日期
-    d = datetime.date.today().strftime("%Y-%m-%d")
-    start_date = (datetime.date.today() - datetime.timedelta(days=DEFAULT_DAYS_RANGE-1)).strftime("%Y-%m-%d")
+async def demo_api_mode():
+    """演示API模式"""
+    print("🚀 API模式演示")
+    print("=" * 50)
     
-    print(f"开始计算李大霄指数...")
-    print(f"日期范围: {start_date} 至 {d}")
-    print("[注意] 使用真实数据进行计算")
+    # 设置短日期范围以快速演示
+    end_date = datetime.date.today().strftime("%Y-%m-%d")
+    start_date = (datetime.date.today() - datetime.timedelta(days=2)).strftime("%Y-%m-%d")
+    
+    print(f"📅 获取日期范围: {start_date} 至 {end_date}")
+    print(f"👤 UP主UID: {BILIBILI_UID}")
+    print()
     
     try:
-        # 获取真实数据 - 尝试使用Playwright模式，失败则显示错误
-        print("正在获取视频数据...")
-        try:
-            videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=d, mode="playwright")
-            print(f"✅ Playwright模式获取到 {len(videos)} 个视频")
-        except Exception as e:
-            print(f"⚠️ Playwright模式失败: {e}")
-            print("🔄 尝试API模式...")
-            try:
-                videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=d, mode="api")
-                print(f"✅ API模式获取到 {len(videos)} 个视频")
-            except Exception as e2:
-                print(f"❌ API模式也失败: {e2}")
-                raise Exception("所有获取模式均失败")
+        print("⚡ 启动API模式...")
+        videos = await fetch_videos(
+            uid=BILIBILI_UID,
+            start_date=start_date,
+            end_date=end_date,
+            mode="api"
+        )
         
-        if not videos:
-            print("❌ 未获取到任何视频数据")
-            print("可能的原因:")
-            print("1. 网络连接问题")
-            print("2. B站访问限制")
-            print("3. 日期范围内没有发布视频")
-            print("4. 解析页面结构失败")
-            return
-        
-        # 显示视频信息
-        print("\n视频详情:")
-        detailed_videos = get_video_details(videos)
-        for i, video in enumerate(detailed_videos, 1):
-            print(f"  {i}. {video['title'][:30]}...")
-            print(f"     播放量: {video['view']:,} | 评论数: {video['comment']:,} | 贡献: {video['contribution']:.2f}")
+        print(f"✅ 成功获取到 {len(videos)} 个视频")
         
         # 计算指数
-        print("\n正在计算指数...")
         index_value = calculate_index(videos)
-        print(f"李大霄指数: {index_value:.2f}")
+        print(f"📊 李大霄指数: {index_value:.2f}")
+        print()
         
-        # 保存数据
-        print("正在保存数据...")
-        save_all_data(d, index_value)
-        
-        # 生成可视化图表
-        print("正在生成图表...")
-        history_data = load_history_data()
-        generate_all_charts(videos, d, index_value, history_data)
-        
-        print("\n✅ 完成！生成的文件:")
-        print(f"- 单日数据: {d}.json")
-        print(f"- 历史数据: history.json")
-        print(f"- 历史趋势图: index_history_{d.replace('-', '')}.png")
-        print(f"- 单日构成图: index_stack_{d.replace('-', '')}.png")
+        return True, videos, index_value
         
     except Exception as e:
-        import traceback
-        print(f"❌ 执行过程中发生错误: {e}")
-        print("\n建议解决方案:")
-        print("1. 检查网络连接")
-        print("2. 稍后重试")
-        print("3. 使用API配置工具: python3 api_config_tool.py safe")
-        print("4. 查看详细错误信息:")
-        traceback.print_exc()
+        print(f"❌ API模式失败: {e}")
+        print("💡 提示: 遇到412错误时请尝试Playwright模式")
+        print()
+        return False, [], 0.0
 
+async def demo_playwright_mode():
+    """演示Playwright模式"""
+    print("🎭 Playwright模式演示")
+    print("=" * 50)
+    
+    if not PLAYWRIGHT_AVAILABLE:
+        print("❌ Playwright库未安装")
+        print("请先安装: pip install playwright && playwright install chromium")
+        print()
+        return False, [], 0.0
+    
+    # 设置短日期范围以快速演示
+    end_date = datetime.date.today().strftime("%Y-%m-%d")
+    start_date = (datetime.date.today() - datetime.timedelta(days=2)).strftime("%Y-%m-%d")
+    
+    print(f"📅 获取日期范围: {start_date} 至 {end_date}")
+    print(f"👤 UP主UID: {BILIBILI_UID}")
+    print()
+    
+    try:
+        print("🌐 启动真实浏览器...")
+        print("⏳ 请耐心等待，包含智能分页导航...")
+        
+        videos = await fetch_videos(
+            uid=BILIBILI_UID,
+            start_date=start_date,
+            end_date=end_date,
+            mode="playwright"
+        )
+        
+        print(f"✅ 成功获取到 {len(videos)} 个视频")
+        print("🎯 Playwright模式特色功能:")
+        print("  • 真实浏览器模拟，最强反检测")
+        print("  • 智能分页按钮点击")
+        print("  • 自动等待页面加载完成")
+        print("  • 支持动态内容和JavaScript")
+        
+        # 计算指数
+        index_value = calculate_index(videos)
+        print(f"📊 李大霄指数: {index_value:.2f}")
+        print()
+        
+        return True, videos, index_value
+        
+    except Exception as e:
+        print(f"❌ Playwright模式失败: {e}")
+        print()
+        return False, [], 0.0
+
+async def demo_full_workflow():
+    """演示完整的工作流程"""
+    print("🔄 完整工作流程演示")
+    print("=" * 50)
+    
+    # 使用标准的7天范围
+    end_date = datetime.date.today().strftime("%Y-%m-%d")
+    start_date = (datetime.date.today() - datetime.timedelta(days=DEFAULT_DAYS_RANGE-1)).strftime("%Y-%m-%d")
+    
+    print(f"📅 计算日期: {end_date} (统计前{DEFAULT_DAYS_RANGE}天视频)")
+    print(f"📅 数据范围: {start_date} 至 {end_date}")
+    print()
+    
+    # 尝试自动模式
+    try:
+        print("🤖 使用智能自动模式...")
+        videos = await fetch_videos(
+            uid=BILIBILI_UID,
+            start_date=start_date,
+            end_date=end_date,
+            mode="auto"
+        )
+        
+        print(f"✅ 成功获取到 {len(videos)} 个视频")
+        
+        # 显示视频详情
+        if videos:
+            print("\n📺 视频列表预览:")
+            print("-" * 80)
+            for i, video in enumerate(videos[:3]):  # 只显示前3个
+                print(f"{i+1}. {video['title'][:40]}...")
+                print(f"   📈 播放: {video['view']:,} | 💬 评论: {video['comment']:,} | 📅 发布: {video['pubdate']}")
+                contribution = video['view'] / 10000 + video['comment'] / 100
+                print(f"   🏆 贡献值: {contribution:.2f}")
+            
+            if len(videos) > 3:
+                print(f"   ... 还有 {len(videos) - 3} 个视频")
+            print()
+        
+        # 计算指数
+        index_value = calculate_index(videos)
+        print(f"🎯 最终李大霄指数: {index_value:.2f}")
+        print()
+        
+        # 保存数据
+        print("💾 保存数据文件...")
+        save_all_data(end_date, videos, index_value)
+        print("✅ 已保存JSON数据文件")
+        
+        # 生成图表
+        print("📊 生成可视化图表...")
+        try:
+            history_data = load_history_data()
+            generate_all_charts(end_date, videos, index_value, history_data)
+            print("✅ 已生成历史趋势图和单日分析图")
+        except Exception as e:
+            print(f"⚠️ 图表生成警告: {e}")
+        
+        print(f"\n🎉 演示完成! 李大霄指数: {index_value:.2f}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ 完整流程演示失败: {e}")
+        print("💡 可能的解决方案:")
+        print("  1. 检查网络连接")
+        print("  2. 尝试手动指定模式: --mode playwright 或 --mode api")
+        print("  3. 检查Playwright是否正确安装")
+        return False
+
+async def main():
+    """主演示函数"""
+    print("🌟 李大霄指数计算程序 - 功能演示")
+    print("=" * 60)
+    print("本演示将展示程序的各种功能和模式")
+    print()
+    
+    # 演示不同模式
+    print("📋 演示计划:")
+    print("1. API模式 - 快速获取数据")
+    print("2. Playwright模式 - 浏览器自动化")  
+    print("3. 完整工作流程 - 数据获取、计算、保存、可视化")
+    print()
+    
+    input("按回车键开始演示...")
+    print()
+    
+    # 1. API模式演示
+    api_success, api_videos, api_index = await demo_api_mode()
+    
+    input("按回车键继续下一个演示...")
+    print()
+    
+    # 2. Playwright模式演示
+    playwright_success, pw_videos, pw_index = await demo_playwright_mode()
+    
+    input("按回车键继续完整流程演示...")
+    print()
+    
+    # 3. 完整工作流程演示
+    full_success = await demo_full_workflow()
+    
+    # 总结
+    print()
+    print("📋 演示结果总结:")
+    print("-" * 40)
+    print(f"API模式:      {'✅ 成功' if api_success else '❌ 失败'}")
+    print(f"Playwright模式: {'✅ 成功' if playwright_success else '❌ 失败'}")
+    print(f"完整流程:     {'✅ 成功' if full_success else '❌ 失败'}")
+    print()
+    
+    if api_success or playwright_success:
+        print("🎯 推荐使用方式:")
+        if playwright_success:
+            print("  python3 lidaxiao.py --mode playwright  # 最稳定可靠")
+        if api_success:
+            print("  python3 lidaxiao.py --mode api         # 开发调试")
+        print("  python3 lidaxiao.py --mode auto        # 智能选择")
+    else:
+        print("💡 请检查网络连接和依赖安装后重试")
 
 if __name__ == "__main__":
     asyncio.run(main())
