@@ -4,7 +4,7 @@
 Bilibili 双模式配置工具
 Dual Mode Configuration Tool
 
-This tool helps users configure both API and browser simulation settings
+This tool helps users configure both API and Playwright settings
 to avoid 412 security control errors and provides troubleshooting utilities.
 """
 
@@ -15,7 +15,7 @@ from config import BILIBILI_UID, API_REQUEST_CONFIG
 
 def print_current_config():
     """显示当前配置"""
-    print("当前程序配置 (适用于API和浏览器模拟两种模式):")
+    print("当前程序配置 (适用于API和Playwright两种模式):")
     print("-" * 50)
     for key, value in API_REQUEST_CONFIG.items():
         print(f"  {key}: {value}")
@@ -23,7 +23,7 @@ def print_current_config():
 
 async def test_connection(mode="auto"):
     """测试指定模式的连接"""
-    mode_names = {"api": "API模式", "browser": "浏览器模拟模式", "playwright": "Playwright模式", "auto": "自动模式"}
+    mode_names = {"api": "API模式", "playwright": "Playwright模式", "auto": "自动模式"}
     print(f"正在测试{mode_names.get(mode, mode)}连接...")
     
     try:
@@ -41,7 +41,7 @@ async def test_connection(mode="auto"):
 
 def main():
     """主函数"""
-    print("Bilibili 双模式配置工具 (API模式 + 浏览器模拟模式)")
+    print("Bilibili 双模式配置工具 (API模式 + Playwright模式)")
     print("=" * 60)
     
     if len(sys.argv) == 1:
@@ -49,7 +49,7 @@ def main():
         print("""
 使用方法:
   python3 api_config_tool.py config         # 显示当前配置
-  python3 api_config_tool.py test [mode]    # 测试连接 (mode: api/browser/playwright/auto)
+  python3 api_config_tool.py test [mode]    # 测试连接 (mode: api/playwright/auto)
   python3 api_config_tool.py safe          # 应用安全配置 (推荐生产环境)
   python3 api_config_tool.py fast          # 应用快速配置 (API模式优化)
   python3 api_config_tool.py proxy <url>   # 设置代理
@@ -58,15 +58,13 @@ def main():
 
 模式说明:
   - API模式: 快速但可能触发412错误，适合开发测试
-  - 浏览器模拟模式: 稳定避免风控，适合生产环境
   - Playwright模式: 真实浏览器自动化，最强反检测能力
   - 自动模式: 智能选择，兼顾速度和稳定性
 
 示例:
   python3 api_config_tool.py test playwright # 测试Playwright模式
-  python3 api_config_tool.py test browser    # 测试浏览器模拟模式
   python3 api_config_tool.py test api        # 测试API模式
-  python3 api_config_tool.py safe            # 应用安全配置后推荐使用浏览器模式
+  python3 api_config_tool.py safe            # 应用安全配置后推荐使用Playwright模式
         """)
         return
     
@@ -80,9 +78,10 @@ def main():
         mode = "auto"
         if len(sys.argv) > 2:
             mode = sys.argv[2].lower()
-            if mode not in ["api", "browser", "playwright", "auto"]:
+            if mode not in ["api", "playwright", "auto"]:
                 print(f"❌ 不支持的模式: {mode}")
-                print("支持的模式: api, browser, playwright, auto")
+                print("支持的模式: api, playwright, auto")
+                print("注意: browser模式已移除，请使用playwright模式替代")
                 return
         
         result = asyncio.run(test_connection(mode))
@@ -90,27 +89,19 @@ def main():
             print(f"\n{mode}模式连接失败的建议:")
             if mode == "api":
                 print("1. 切换到Playwright模式: python3 lidaxiao.py --mode playwright")
-                print("2. 切换到浏览器模拟模式: python3 lidaxiao.py --mode browser")
-                print("3. 使用自动模式: python3 lidaxiao.py --mode auto") 
-                print("4. 应用安全配置: python3 api_config_tool.py safe")
-            elif mode == "browser":
-                print("1. 尝试Playwright模式: python3 lidaxiao.py --mode playwright")
-                print("2. 检查网络连接")
-                print("3. 等待一段时间后重试")
-                print("4. 尝试使用代理")
+                print("2. 使用自动模式: python3 lidaxiao.py --mode auto") 
+                print("3. 应用安全配置: python3 api_config_tool.py safe")
             elif mode == "playwright":
                 print("1. 检查Playwright是否正确安装: playwright install chromium")
-                print("2. 切换到浏览器模拟模式: python3 lidaxiao.py --mode browser")
-                print("3. 检查网络连接")
-                print("4. 等待一段时间后重试")
+                print("2. 检查网络连接")
+                print("3. 等待一段时间后重试")
             else:  # auto mode
                 print("1. 使用Playwright模式: python3 lidaxiao.py --mode playwright")
-                print("2. 使用浏览器模拟模式: python3 lidaxiao.py --mode browser")
-                print("3. 应用安全配置: python3 api_config_tool.py safe")
-            print("5. 查看故障排除信息: python3 api_config_tool.py help")
+                print("2. 应用安全配置: python3 api_config_tool.py safe")
+            print("4. 查看故障排除信息: python3 api_config_tool.py help")
         
     elif command == "safe":
-        print("应用安全模式配置 (推荐用于浏览器模拟模式)...")
+        print("应用安全模式配置 (推荐用于Playwright模式)...")
         configure_api_settings(
             timeout=20,
             retry_attempts=2,
@@ -118,7 +109,7 @@ def main():
             rate_limit_delay=5
         )
         print("✅ 已应用安全模式配置 (低风险，速度较慢)")
-        print("💡 建议配合浏览器模拟模式使用: python3 lidaxiao.py --mode browser")
+        print("💡 建议配合Playwright模式使用: python3 lidaxiao.py --mode playwright")
         print_current_config()
         
     elif command == "fast":

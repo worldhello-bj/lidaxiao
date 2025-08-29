@@ -135,7 +135,7 @@ async def example_error_handling():
                     uid=2137589551,
                     start_date=start_date,
                     end_date=end_date,
-                    mode="browser"
+                    mode="api"  # 改为使用api模式作为对比
                 )
                 print(f"✅ 浏览器模拟模式成功：{len(videos)} 个视频")
                 
