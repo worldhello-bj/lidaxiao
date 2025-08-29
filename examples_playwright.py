@@ -85,7 +85,8 @@ async def example_browser_context():
                 
                 html_content = await browser.fetch_user_videos(
                     uid=2137589551, 
-                    page_num=page_num
+                    page_num=page_num,
+                    is_first_page=(page_num == 1)
                 )
                 
                 page_videos = browser.parse_videos_from_html(html_content)

@@ -141,14 +141,30 @@ class PlaywrightBrowserSimulator:
         if hasattr(self, 'playwright'):
             await self.playwright.stop()
             
-    async def fetch_user_videos(self, uid, page_num=1):
+    async def fetch_user_videos(self, uid, page_num=1, is_first_page=True):
         """获取用户视频页面内容"""
-        url = f"https://space.bilibili.com/{uid}/video?tid=0&pn={page_num}&keyword=&order=pubdate"
+        if is_first_page:
+            # 首页直接导航
+            url = f"https://space.bilibili.com/{uid}/video?tid=0&keyword=&order=pubdate"
+            
+            try:
+                # 导航到页面
+                await self.page.goto(url, wait_until='networkidle', timeout=30000)
+            except Exception as e:
+                logger.error(f"Playwright导航到页面失败: {e}")
+                raise
+        else:
+            # 非首页通过点击分页按钮导航
+            try:
+                success = await self.navigate_to_next_page(page_num)
+                if not success:
+                    logger.warning(f"无法找到或点击第{page_num}页的分页按钮")
+                    return None
+            except Exception as e:
+                logger.error(f"点击分页按钮失败: {e}")
+                raise
         
         try:
-            # 导航到页面
-            await self.page.goto(url, wait_until='networkidle', timeout=30000)
-            
             # 等待视频列表加载
             await self.page.wait_for_selector('.small-item, .bili-video-card', timeout=15000)
             
@@ -180,8 +196,85 @@ class PlaywrightBrowserSimulator:
             return content
             
         except Exception as e:
-            logger.error(f"Playwright获取页面失败: {e}")
+            logger.error(f"Playwright获取页面内容失败: {e}")
             raise
+
+    async def navigate_to_next_page(self, target_page_num):
+        """通过点击分页按钮导航到目标页面"""
+        try:
+            # 等待分页区域加载
+            await self.page.wait_for_selector('.vui_pagenation, .page-wrap, .bili-pager', timeout=10000)
+            
+            # 尝试多种分页按钮选择器
+            pagination_selectors = [
+                f'.vui_button.vui_pagenation--btn-num:has-text("{target_page_num}")',
+                f'.page-item:has-text("{target_page_num}")',
+                f'button:has-text("{target_page_num}")',
+                f'a:has-text("{target_page_num}")'
+            ]
+            
+            button_found = False
+            for selector in pagination_selectors:
+                try:
+                    # 检查按钮是否存在
+                    button = self.page.locator(selector).first
+                    if await button.count() > 0:
+                        logger.info(f"找到分页按钮，使用选择器: {selector}")
+                        
+                        # 滚动到按钮位置确保可见
+                        await button.scroll_into_view_if_needed()
+                        await self.page.wait_for_timeout(1000)
+                        
+                        # 点击按钮
+                        await button.click()
+                        
+                        # 等待页面加载和网络请求完成
+                        await self.page.wait_for_load_state('networkidle', timeout=15000)
+                        await self.page.wait_for_timeout(2000)  # 额外等待确保内容加载
+                        
+                        button_found = True
+                        logger.info(f"成功点击第{target_page_num}页分页按钮")
+                        break
+                        
+                except Exception as e:
+                    logger.debug(f"选择器 {selector} 未找到按钮: {e}")
+                    continue
+            
+            if not button_found:
+                # 如果没找到具体页码按钮，尝试点击"下一页"按钮
+                next_button_selectors = [
+                    '.vui_button.vui_pagenation--btn-side:has-text("下一页")',
+                    '.page-item.next',
+                    'button:has-text("下一页")',
+                    '.bili-pager-next'
+                ]
+                
+                for selector in next_button_selectors:
+                    try:
+                        button = self.page.locator(selector).first
+                        if await button.count() > 0 and await button.is_enabled():
+                            logger.info(f"点击下一页按钮，选择器: {selector}")
+                            
+                            await button.scroll_into_view_if_needed()
+                            await self.page.wait_for_timeout(1000)
+                            await button.click()
+                            
+                            await self.page.wait_for_load_state('networkidle', timeout=15000)
+                            await self.page.wait_for_timeout(2000)
+                            
+                            button_found = True
+                            logger.info(f"成功点击下一页按钮")
+                            break
+                            
+                    except Exception as e:
+                        logger.debug(f"下一页选择器 {selector} 不可用: {e}")
+                        continue
+            
+            return button_found
+            
+        except Exception as e:
+            logger.error(f"导航到第{target_page_num}页失败: {e}")
+            return False
             
     def parse_videos_from_html(self, html_content):
         """解析HTML内容获取视频数据"""
@@ -654,7 +747,14 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
                 while page <= max_pages:
                     try:
                         logger.info(f"正在获取第 {page} 页数据...")
-                        html_content = await browser.fetch_user_videos(uid, page)
+                        # 首页直接导航，后续页面通过点击分页按钮导航
+                        is_first_page = (page == 1)
+                        html_content = await browser.fetch_user_videos(uid, page, is_first_page=is_first_page)
+                        
+                        # 如果获取内容失败（比如点击按钮失败），停止翻页
+                        if html_content is None:
+                            logger.info(f"第 {page} 页无法获取内容（可能没有更多页面），停止翻页")
+                            break
                         
                         # 解析视频数据
                         page_videos = browser.parse_videos_from_html(html_content)
