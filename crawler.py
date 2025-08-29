@@ -16,7 +16,7 @@ import asyncio
 import logging
 import time
 import re
-from config import API_REQUEST_CONFIG, ERROR_MESSAGES
+from config import API_REQUEST_CONFIG, ERROR_MESSAGES, BROWSER_CONFIG
 
 try:
     from bs4 import BeautifulSoup
@@ -50,9 +50,10 @@ logger = logging.getLogger(__name__)
 class PlaywrightBrowserSimulator:
     """使用Playwright进行真实浏览器自动化的模拟器"""
     
-    def __init__(self, headless=True, browser_type="chromium"):
-        self.headless = headless
-        self.browser_type = browser_type
+    def __init__(self, headless=None, browser_type=None):
+        # 如果未指定参数，使用配置文件中的设置
+        self.headless = headless if headless is not None else BROWSER_CONFIG["headless"]
+        self.browser_type = browser_type if browser_type is not None else BROWSER_CONFIG["browser_type"]
         self.browser = None
         self.context = None
         self.page = None
@@ -619,7 +620,7 @@ class PlaywrightBrowserSimulator:
         return 0
 
 
-async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True, extended_pages=False):
+async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True, extended_pages=False, headless=None):
     """
     获取指定日期范围内的视频数据 (支持API和Playwright两种模式)
     :param uid: UP主UID (2137589551)
@@ -631,6 +632,7 @@ async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True
         - "auto": 自动选择 (优先API，失败时切换到Playwright)
     :param use_fallback: 保留参数以保持兼容性 (已停用模拟数据功能)
     :param extended_pages: 是否启用扩展页数爬取 (用于历史数据计算，获取更多视频)
+    :param headless: 是否使用无头模式 (仅对Playwright模式有效, None: 使用配置文件设置)
     :return: 视频列表 [{"aid": 视频ID, "view": 播放量, "comment": 评论数, "pubdate": 发布日期, "title": 标题, "created": 时间戳}]
     """
     
@@ -647,11 +649,11 @@ async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True
             else:
                 # auto模式下，API失败时切换到Playwright
                 logger.warning(f"API模式失败: {error_msg}，切换到Playwright模式")
-                return await fetch_videos_playwright(uid, start_date, end_date, use_fallback, extended_pages)
+                return await fetch_videos_playwright(uid, start_date, end_date, use_fallback, extended_pages, headless)
     
     elif mode == "playwright" or mode == "auto":
         logger.info(f"开始使用Playwright模式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
-        return await fetch_videos_playwright(uid, start_date, end_date, use_fallback, extended_pages)
+        return await fetch_videos_playwright(uid, start_date, end_date, use_fallback, extended_pages, headless)
     
     else:
         raise ValueError(f"不支持的模式: {mode}. 支持的模式: 'api', 'playwright', 'auto'。browser模式已移除，请使用playwright模式替代。")
@@ -711,7 +713,7 @@ async def fetch_videos_api(uid, start_date, end_date, extended_pages=False):
 
 
 
-async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, extended_pages=False, headless=True):
+async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, extended_pages=False, headless=None):
     """
     使用Playwright真实浏览器获取视频数据
     :param uid: UP主UID (2137589551)
@@ -719,12 +721,16 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
     :param end_date: 结束日期 (YYYY-MM-DD)
     :param use_fallback: 保留参数以保持兼容性
     :param extended_pages: 是否启用扩展页数爬取 (获取更多视频数据，用于历史计算)
-    :param headless: 是否使用无头模式
+    :param headless: 是否使用无头模式 (None: 使用配置文件设置, True/False: 覆盖配置)
     :return: 视频列表
     """
     
     if not PLAYWRIGHT_AVAILABLE:
         raise ImportError("Playwright库不可用，请安装: pip install playwright && playwright install chromium")
+    
+    # 如果未指定headless参数，使用配置文件中的设置
+    if headless is None:
+        headless = BROWSER_CONFIG["headless"]
     
     all_videos = []
     

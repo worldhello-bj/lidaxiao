@@ -41,6 +41,12 @@ API_REQUEST_CONFIG = {
     "trust_env": True,          # 信任环境代理设置
 }
 
+# 浏览器配置 (用于Playwright模式)
+BROWSER_CONFIG = {
+    "headless": True,           # 是否使用无头模式 (True: 后台运行, False: 显示浏览器窗口)
+    "browser_type": "chromium", # 浏览器类型: chromium, firefox, webkit
+}
+
 # 历史指数计算配置 (已简化 - 不再使用数学模型)
 
 # 历史计算支持的模式 (现在只使用当前数据近似)
