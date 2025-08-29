@@ -19,6 +19,13 @@ import re
 from config import API_REQUEST_CONFIG, ERROR_MESSAGES
 
 try:
+    from bs4 import BeautifulSoup
+    BS4_AVAILABLE = True
+except ImportError:
+    BS4_AVAILABLE = False
+    logging.warning("BeautifulSoup4 not available, HTML parsing will be limited")
+
+try:
     from bilibili_api import user
     API_MODE_AVAILABLE = True
 except ImportError:
@@ -178,6 +185,10 @@ class PlaywrightBrowserSimulator:
             
     def parse_videos_from_html(self, html_content):
         """解析HTML内容获取视频数据"""
+        if not BS4_AVAILABLE:
+            logger.error("BeautifulSoup4 not available, cannot parse HTML content")
+            return []
+            
         soup = BeautifulSoup(html_content, 'html.parser')
         videos = []
         
@@ -215,6 +226,8 @@ class PlaywrightBrowserSimulator:
                     if videos:
                         logger.info(f"从JavaScript状态解析到 {len(videos)} 个视频")
                         return videos
+                    else:
+                        logger.debug("JavaScript状态中没有找到视频数据")
                         
                 except json.JSONDecodeError as e:
                     logger.debug(f"解析JSON失败: {e}")
@@ -277,13 +290,16 @@ class PlaywrightBrowserSimulator:
                         elif i == 1:  # 第二个是评论数
                             comment_count = number
                 
+                # 提取发布时间戳
+                created_timestamp = self._extract_publish_timestamp(card)
+                
                 if aid > 0:
                     videos.append({
                         'aid': aid,
                         'view': view_count,
                         'comment': comment_count,
                         'title': title,
-                        'created': int(time.time())  # 当前时间戳，因为HTML中难以提取准确的发布时间
+                        'created': created_timestamp
                     })
                     
             except Exception as e:
@@ -327,6 +343,134 @@ class PlaywrightBrowserSimulator:
         except (ValueError, AttributeError):
             pass
             
+        return 0
+
+    def _extract_publish_timestamp(self, card):
+        """从视频卡片提取发布时间戳"""
+        try:
+            # 寻找时间相关的元素
+            time_patterns = [
+                # 寻找包含日期的元素
+                r'(\d{4}-\d{1,2}-\d{1,2})',  # YYYY-MM-DD format
+                r'(\d{1,2}-\d{1,2})',        # MM-DD format
+                r'(\d{4}/\d{1,2}/\d{1,2})',  # YYYY/MM/DD format
+                r'(\d{1,2}/\d{1,2})',        # MM/DD format
+                r'(\d+天前)',                 # X天前
+                r'(\d+小时前)',               # X小时前
+                r'(\d+分钟前)',               # X分钟前
+                r'(\d+个月前)',               # X个月前
+                r'(\d+年前)',                 # X年前
+            ]
+            
+            # 查找时间元素的选择器
+            time_selectors = [
+                'span[title]',  # 带title属性的span
+                '.time',        # class包含time的元素
+                '.date',        # class包含date的元素
+                '.pubdate',     # 发布日期类
+                '.upload-time', # 上传时间类
+                'time',         # time标签
+                '[data-time]',  # 带data-time属性的元素
+            ]
+            
+            # 遍历时间选择器寻找时间信息
+            for selector in time_selectors:
+                time_elements = card.select(selector)
+                for elem in time_elements:
+                    # 检查title属性
+                    title_text = elem.get('title', '')
+                    if title_text:
+                        timestamp = self._parse_time_string(title_text)
+                        if timestamp > 0:
+                            return timestamp
+                    
+                    # 检查data-time属性
+                    data_time = elem.get('data-time', '')
+                    if data_time:
+                        try:
+                            return int(data_time)
+                        except ValueError:
+                            pass
+                    
+                    # 检查元素文本内容
+                    text_content = elem.get_text(strip=True)
+                    if text_content:
+                        timestamp = self._parse_time_string(text_content)
+                        if timestamp > 0:
+                            return timestamp
+            
+            # 如果没有找到具体时间，在整个卡片中搜索时间模式
+            card_text = card.get_text()
+            for pattern in time_patterns:
+                match = re.search(pattern, card_text)
+                if match:
+                    timestamp = self._parse_time_string(match.group(1))
+                    if timestamp > 0:
+                        return timestamp
+            
+        except Exception as e:
+            logger.debug(f"提取时间戳失败: {e}")
+        
+        # 如果无法提取时间戳，返回当前时间作为fallback
+        logger.debug("无法从HTML提取发布时间，使用当前时间作为fallback")
+        return int(time.time())
+    
+    def _parse_time_string(self, time_str):
+        """解析时间字符串为时间戳"""
+        try:
+            current_time = datetime.datetime.now()
+            
+            # 处理相对时间格式
+            if '天前' in time_str:
+                days = int(re.search(r'(\d+)天前', time_str).group(1))
+                target_time = current_time - datetime.timedelta(days=days)
+                return int(target_time.timestamp())
+            elif '小时前' in time_str:
+                hours = int(re.search(r'(\d+)小时前', time_str).group(1))
+                target_time = current_time - datetime.timedelta(hours=hours)
+                return int(target_time.timestamp())
+            elif '分钟前' in time_str:
+                minutes = int(re.search(r'(\d+)分钟前', time_str).group(1))
+                target_time = current_time - datetime.timedelta(minutes=minutes)
+                return int(target_time.timestamp())
+            elif '个月前' in time_str:
+                months = int(re.search(r'(\d+)个月前', time_str).group(1))
+                target_time = current_time - datetime.timedelta(days=months * 30)  # 近似处理
+                return int(target_time.timestamp())
+            elif '年前' in time_str:
+                years = int(re.search(r'(\d+)年前', time_str).group(1))
+                target_time = current_time - datetime.timedelta(days=years * 365)  # 近似处理
+                return int(target_time.timestamp())
+            
+            # 处理绝对时间格式
+            date_formats = [
+                '%Y-%m-%d %H:%M:%S',  # 2024-01-01 12:00:00
+                '%Y-%m-%d %H:%M',     # 2024-01-01 12:00
+                '%Y-%m-%d',           # 2024-01-01
+                '%Y/%m/%d %H:%M:%S',  # 2024/01/01 12:00:00
+                '%Y/%m/%d %H:%M',     # 2024/01/01 12:00
+                '%Y/%m/%d',           # 2024/01/01
+                '%m-%d %H:%M',        # 01-01 12:00 (当年)
+                '%m-%d',              # 01-01 (当年)
+                '%m/%d %H:%M',        # 01/01 12:00 (当年)
+                '%m/%d',              # 01/01 (当年)
+            ]
+            
+            for fmt in date_formats:
+                try:
+                    if '%Y' not in fmt:
+                        # 对于没有年份的格式，假设是当年
+                        time_str_with_year = f"{current_time.year}-{time_str}" if '%m-%d' in fmt or '%m/%d' in fmt else time_str
+                        parsed_time = datetime.datetime.strptime(time_str_with_year, f"%Y-{fmt}")
+                    else:
+                        parsed_time = datetime.datetime.strptime(time_str, fmt)
+                    return int(parsed_time.timestamp())
+                except ValueError:
+                    continue
+                    
+        except Exception as e:
+            logger.debug(f"解析时间字符串失败 '{time_str}': {e}")
+        
         return 0
 
 
@@ -445,6 +589,9 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
             
             async with PlaywrightBrowserSimulator(headless=headless) as browser:
                 page = 1
+                consecutive_failures = 0  # 连续失败页数
+                max_consecutive_failures = 2  # 允许的最大连续失败页数
+                
                 # 根据是否启用扩展模式动态设置页数限制
                 if extended_pages:
                     max_pages = 15  # 扩展模式：最多获取15页数据
@@ -454,24 +601,32 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
                 
                 while page <= max_pages:
                     try:
-                        logger.debug(f"获取第 {page} 页数据...")
+                        logger.info(f"正在获取第 {page} 页数据...")
                         html_content = await browser.fetch_user_videos(uid, page)
                         
                         # 解析视频数据
                         page_videos = browser.parse_videos_from_html(html_content)
                         
                         if not page_videos:
-                            logger.info(f"第 {page} 页没有更多视频数据")
+                            logger.info(f"第 {page} 页没有更多视频数据，停止翻页")
                             break
                         
+                        logger.info(f"第 {page} 页成功解析到 {len(page_videos)} 个视频")
+                        
                         # 筛选指定日期范围内的视频
+                        valid_videos_count = 0
                         for video in page_videos:
                             if video['created'] > 0:
                                 pubdate = datetime.datetime.fromtimestamp(video['created']).strftime("%Y-%m-%d")
                                 if start_date <= pubdate <= end_date:
                                     video['pubdate'] = pubdate
                                     all_videos.append(video)
+                                    valid_videos_count += 1
                         
+                        logger.info(f"第 {page} 页有 {valid_videos_count} 个视频符合日期范围 {start_date} 至 {end_date}")
+                        
+                        # 重置连续失败计数
+                        consecutive_failures = 0
                         page += 1
                         
                         # 添加页面间隔，避免被检测为爬虫
@@ -482,14 +637,27 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
                         logger.error("触发安全风控，停止尝试")
                         raise
                     except Exception as e:
-                        logger.error(f"获取第 {page} 页数据失败: {e}")
-                        break
+                        consecutive_failures += 1
+                        logger.error(f"获取第 {page} 页数据失败 (连续失败 {consecutive_failures} 次): {e}")
+                        
+                        # 如果连续失败次数超过阈值，停止翻页
+                        if consecutive_failures >= max_consecutive_failures:
+                            logger.error(f"连续 {consecutive_failures} 页解析失败，停止翻页")
+                            break
+                        
+                        # 否则继续下一页
+                        page += 1
+                        await asyncio.sleep(random.uniform(2, 4))  # 失败后稍微等待
+                
                 
                 if all_videos:
-                    logger.info(f"Playwright模式成功获取到 {len(all_videos)} 个符合条件的视频")
+                    logger.info(f"Playwright模式成功获取到 {len(all_videos)} 个符合条件的视频 (日期范围: {start_date} 至 {end_date})")
+                    # 添加时间戳验证日志
+                    valid_timestamps = sum(1 for video in all_videos if video.get('created', 0) > 0)
+                    logger.info(f"其中 {valid_timestamps} 个视频有有效的时间戳信息")
                     return all_videos
                 else:
-                    raise Exception("未获取到任何视频数据")
+                    raise Exception(f"未获取到符合日期范围 {start_date} 至 {end_date} 的任何视频数据")
                     
         except SecurityControlException:
             logger.error("触发安全风控，停止重试")
