@@ -451,6 +451,7 @@ async def run_current_mode(args):
     mode_descriptions = {
         'api': '快速API模式',
         'browser': '浏览器模拟模式', 
+        'playwright': 'Playwright自动化模式',
         'auto': '智能自动模式'
     }
     
