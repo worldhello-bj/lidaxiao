@@ -23,6 +23,7 @@ Playwright模式是李大霄指数计算程序的最新升级模式，使用真�
 - 支持单页应用(SPA)的数据获取
 - 处理异步加载的视频列表
 - 支持复杂的交互式页面
+- **智能分页导航**: 通过模拟点击分页按钮实现真正的页面切换
 
 ## 安装配置
 
@@ -84,8 +85,8 @@ from crawler import PlaywrightBrowserSimulator
 
 async def advanced_usage():
     async with PlaywrightBrowserSimulator(headless=True) as browser:
-        # 获取第一页数据
-        html = await browser.fetch_user_videos(uid=2137589551, page_num=1)
+        # 获取第一页数据（直接导航）
+        html = await browser.fetch_user_videos(uid=2137589551, page_num=1, is_first_page=True)
         
         # 解析视频数据
         videos = browser.parse_videos_from_html(html)
@@ -157,6 +158,34 @@ await context.add_init_script("""
 - 资源受限的环境
 - 对速度要求极高的场景
 - 简单的静态页面爬取
+
+## 分页功能改进 🔄
+
+### 智能分页导航
+从v2024版本开始，Playwright模式使用全新的**按钮点击分页**机制，替代了传统的URL参数翻页：
+
+- **问题解决**: 解决了B站限制URL参数`pn`访问导致的翻页失败问题
+- **真实模拟**: 通过点击页面分页按钮实现真正的用户行为模拟
+- **多重备选**: 支持多种分页按钮选择器，确保高兼容性
+- **智能容错**: 当找不到指定页码按钮时，自动尝试"下一页"按钮
+
+### 分页选择器
+支持的分页按钮选择器（按优先级排序）：
+```javascript
+// 主要目标（B站标准分页）
+'.vui_button.vui_pagenation--btn-num:has-text("2")'
+
+// 备选方案
+'.page-item:has-text("2")'
+'button:has-text("2")'
+'a:has-text("2")'
+
+// 下一页按钮（备选）
+'.vui_button.vui_pagenation--btn-side:has-text("下一页")'
+'.page-item.next'
+'button:has-text("下一页")'
+'.bili-pager-next'
+```
 
 ## 故障排除
 
