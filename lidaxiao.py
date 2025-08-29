@@ -203,6 +203,10 @@ async def main():
     parser = argparse.ArgumentParser(description='李大霄指数计算程序')
     parser.add_argument('--mode', choices=['api', 'playwright', 'auto'], default='auto',
                        help='获取模式: api(快速但可能触发412), playwright(真实浏览器，最强反检测), auto(自动选择)')
+    parser.add_argument('--headless', action='store_true', default=None,
+                       help='强制使用无头模式 (后台运行浏览器，用于服务器环境)')
+    parser.add_argument('--no-headless', action='store_true', default=None,
+                       help='强制使用有头模式 (显示浏览器窗口，用于调试和测试)')
     
     # 历史计算功能参数
     parser.add_argument('--historical', action='store_true',
@@ -214,16 +218,27 @@ async def main():
     
     args = parser.parse_args()
     
+    # 处理headless模式参数
+    headless_mode = None
+    if args.headless and args.no_headless:
+        print("错误: --headless 和 --no-headless 不能同时使用")
+        return
+    elif args.headless:
+        headless_mode = True
+    elif args.no_headless:
+        headless_mode = False
+    # 如果都没有指定，将使用配置文件中的默认值 (headless_mode = None)
+    
     # 历史计算模式
     if args.historical:
-        await run_historical_mode(args)
+        await run_historical_mode(args, headless=headless_mode)
         return
     
     # 原有的当前指数计算模式
-    await run_current_mode(args)
+    await run_current_mode(args, headless=headless_mode)
 
 
-async def run_historical_mode(args):
+async def run_historical_mode(args, headless=None):
     """历史指数计算模式 - 使用当前视频数据作为历史数据近似"""
     print("=" * 50)
     print("历史李大霄指数回推计算模式")
@@ -246,7 +261,7 @@ async def run_historical_mode(args):
         # 获取当前视频数据作为基础
         print("正在获取视频数据作为历史数据回推基础...")
         videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=end_date, 
-                                  mode=args.mode, extended_pages=fetch_all_pages)
+                                  mode=args.mode, extended_pages=fetch_all_pages, headless=headless)
         print(f"获取到 {len(videos)} 个视频")
         
         # 验证视频数据是否足够
@@ -440,7 +455,7 @@ async def calculate_default_historical_range(videos, args, current_date, current
         print(f"默认历史计算失败: {e}")
 
 
-async def run_current_mode(args):
+async def run_current_mode(args, headless=None):
     """原有的当前指数计算模式"""
     
     # 获取当前日期
@@ -459,7 +474,7 @@ async def run_current_mode(args):
     try:
         # 爬取数据
         print("正在爬取视频数据...")
-        videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=d, mode=args.mode)
+        videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=d, mode=args.mode, headless=headless)
         print(f"获取到 {len(videos)} 个视频")
         
         # 计算指数
