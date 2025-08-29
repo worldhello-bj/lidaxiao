@@ -160,6 +160,7 @@ def validate_video_data_sufficiency(videos, args):
         print("3. UP主在指定时间范围内没有发布视频")
         print("解决建议:")
         print("- 检查网络连接")
+        print("- 尝试使用Playwright模式: --mode playwright")
         print("- 尝试使用浏览器模式: --mode browser")
         print("- 稍后重试")
         return False
@@ -201,8 +202,8 @@ def validate_video_data_sufficiency(videos, args):
 async def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='李大霄指数计算程序')
-    parser.add_argument('--mode', choices=['api', 'browser', 'auto'], default='auto',
-                       help='获取模式: api(快速但可能触发412), browser(慢但稳定), auto(自动选择)')
+    parser.add_argument('--mode', choices=['api', 'browser', 'playwright', 'auto'], default='auto',
+                       help='获取模式: api(快速但可能触发412), browser(慢但稳定), playwright(真实浏览器，最强反检测), auto(自动选择)')
     
     # 历史计算功能参数
     parser.add_argument('--historical', action='store_true',
@@ -489,16 +490,18 @@ async def run_current_mode(args):
         # 提供针对性的错误处理建议
         if "412" in error_msg or "安全风控" in error_msg:
             print("\n这是Bilibili安全风控错误。解决建议:")
-            print("1. 尝试浏览器模拟模式: python3 lidaxiao.py --mode browser")
-            print("2. 使用安全配置: python3 api_config_tool.py safe")
-            print("3. 等待一段时间后重试")
-            print("4. 运行demo.py查看演示功能")
+            print("1. 尝试Playwright模式: python3 lidaxiao.py --mode playwright")
+            print("2. 尝试浏览器模拟模式: python3 lidaxiao.py --mode browser")
+            print("3. 使用安全配置: python3 api_config_tool.py safe")
+            print("4. 等待一段时间后重试")
+            print("5. 运行demo.py查看演示功能")
         elif "address associated with hostname" in error_msg:
             print("\n这是网络连接问题。解决建议:")
             print("1. 检查网络连接") 
             print("2. 检查防火墙设置")
-            print("3. 尝试浏览器模拟模式: python3 lidaxiao.py --mode browser")
-            print("4. 运行demo.py查看演示功能")
+            print("3. 尝试Playwright模式: python3 lidaxiao.py --mode playwright")
+            print("4. 尝试浏览器模拟模式: python3 lidaxiao.py --mode browser")
+            print("5. 运行demo.py查看演示功能")
         
         print(f"\n详细故障排除信息:")
         print(get_api_troubleshooting_info())

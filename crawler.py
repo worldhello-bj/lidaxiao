@@ -27,6 +27,13 @@ except ImportError:
     API_MODE_AVAILABLE = False
     logging.warning("bilibili-api-python not available, only browser simulation mode will work")
 
+try:
+    from playwright.async_api import async_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    logging.warning("Playwright not available, only traditional browser simulation will work")
+
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -348,15 +355,306 @@ class BrowserSimulator:
         return videos
 
 
+class PlaywrightBrowserSimulator:
+    """使用Playwright进行真实浏览器自动化的模拟器"""
+    
+    def __init__(self, headless=True, browser_type="chromium"):
+        self.headless = headless
+        self.browser_type = browser_type
+        self.browser = None
+        self.context = None
+        self.page = None
+        
+    async def __aenter__(self):
+        """异步上下文管理器入口"""
+        await self.start()
+        return self
+        
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """异步上下文管理器退出"""
+        await self.close()
+        
+    async def start(self):
+        """启动浏览器"""
+        if not PLAYWRIGHT_AVAILABLE:
+            raise ImportError("Playwright库不可用，请安装: pip install playwright && playwright install chromium")
+            
+        self.playwright = await async_playwright().start()
+        
+        # 启动浏览器
+        if self.browser_type == "chromium":
+            browser_launcher = self.playwright.chromium
+        elif self.browser_type == "firefox":
+            browser_launcher = self.playwright.firefox
+        elif self.browser_type == "webkit":
+            browser_launcher = self.playwright.webkit
+        else:
+            raise ValueError(f"不支持的浏览器类型: {self.browser_type}")
+            
+        self.browser = await browser_launcher.launch(
+            headless=self.headless,
+            args=[
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-features=VizDisplayCompositor'
+            ]
+        )
+        
+        # 创建浏览器上下文
+        self.context = await self.browser.new_context(
+            viewport={'width': 1920, 'height': 1080},
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            extra_http_headers={
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+            }
+        )
+        
+        # 设置反检测脚本
+        await self.context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+            });
+            
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+            
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['zh-CN', 'zh', 'en'],
+            });
+            
+            window.chrome = {
+                runtime: {},
+            };
+            
+            Object.defineProperty(navigator, 'permissions', {
+                get: () => ({
+                    query: () => Promise.resolve({ state: 'granted' }),
+                }),
+            });
+        """)
+        
+        self.page = await self.context.new_page()
+        
+    async def close(self):
+        """关闭浏览器"""
+        if self.page:
+            await self.page.close()
+        if self.context:
+            await self.context.close()
+        if self.browser:
+            await self.browser.close()
+        if hasattr(self, 'playwright'):
+            await self.playwright.stop()
+            
+    async def fetch_user_videos(self, uid, page_num=1):
+        """获取用户视频页面内容"""
+        url = f"https://space.bilibili.com/{uid}/video?tid=0&pn={page_num}&keyword=&order=pubdate"
+        
+        try:
+            # 导航到页面
+            await self.page.goto(url, wait_until='networkidle', timeout=30000)
+            
+            # 等待视频列表加载
+            await self.page.wait_for_selector('.small-item, .bili-video-card', timeout=15000)
+            
+            # 滚动页面以触发懒加载
+            await self.page.evaluate("""
+                () => {
+                    return new Promise((resolve) => {
+                        let totalHeight = 0;
+                        let distance = 100;
+                        let timer = setInterval(() => {
+                            let scrollHeight = document.body.scrollHeight;
+                            window.scrollBy(0, distance);
+                            totalHeight += distance;
+                            
+                            if(totalHeight >= scrollHeight){
+                                clearInterval(timer);
+                                resolve();
+                            }
+                        }, 100);
+                    });
+                }
+            """)
+            
+            # 等待一段时间让内容完全加载
+            await self.page.wait_for_timeout(2000)
+            
+            # 获取页面内容
+            content = await self.page.content()
+            return content
+            
+        except Exception as e:
+            logger.error(f"Playwright获取页面失败: {e}")
+            raise
+            
+    def parse_videos_from_html(self, html_content):
+        """解析HTML内容获取视频数据"""
+        soup = BeautifulSoup(html_content, 'html.parser')
+        videos = []
+        
+        # 首先尝试从JavaScript状态数据解析
+        script_tags = soup.find_all('script')
+        for script in script_tags:
+            script_content = script.string
+            if script_content and 'window.__INITIAL_STATE__' in script_content:
+                try:
+                    # 提取JSON数据
+                    start = script_content.find('window.__INITIAL_STATE__=') + len('window.__INITIAL_STATE__=')
+                    end = script_content.find(';(function()', start)
+                    if end == -1:
+                        end = script_content.find('</script>', start)
+                    
+                    json_str = script_content[start:end].strip()
+                    if json_str.endswith(';'):
+                        json_str = json_str[:-1]
+                    
+                    initial_state = json.loads(json_str)
+                    
+                    # 从初始状态中提取视频数据
+                    if 'space' in initial_state and 'videoList' in initial_state['space']:
+                        video_list = initial_state['space']['videoList']
+                        if 'list' in video_list and 'vlist' in video_list['list']:
+                            for video in video_list['list']['vlist']:
+                                videos.append({
+                                    'aid': video.get('aid', 0),
+                                    'view': video.get('play', 0),
+                                    'comment': video.get('comment', 0),
+                                    'title': video.get('title', ''),
+                                    'created': video.get('created', 0)
+                                })
+                    
+                    if videos:
+                        logger.info(f"从JavaScript状态解析到 {len(videos)} 个视频")
+                        return videos
+                        
+                except json.JSONDecodeError as e:
+                    logger.debug(f"解析JSON失败: {e}")
+                    continue
+                except Exception as e:
+                    logger.debug(f"解析初始状态失败: {e}")
+                    continue
+        
+        # 如果JS解析失败，回退到HTML解析
+        logger.info("JavaScript状态解析失败，回退到HTML解析")
+        return self._parse_videos_from_html_elements(soup)
+    
+    def _parse_videos_from_html_elements(self, soup):
+        """从HTML元素解析视频数据"""
+        videos = []
+        
+        # 查找视频卡片元素
+        video_cards = soup.find_all('div', class_=['small-item', 'bili-video-card']) or \
+                     soup.find_all('li', class_=['small-item', 'bili-video-card'])
+        
+        for card in video_cards:
+            try:
+                # 提取视频链接和aid
+                link = card.find('a', href=True)
+                if not link:
+                    continue
+                    
+                href = link['href']
+                aid = 0
+                
+                # 提取aid
+                if '/video/av' in href:
+                    aid_match = re.search(r'/video/av(\d+)', href)
+                    if aid_match:
+                        aid = int(aid_match.group(1))
+                elif '/video/BV' in href:
+                    # BV号转换为aid（简化处理，实际可能需要更复杂的转换）
+                    bv_match = re.search(r'/video/(BV\w+)', href)
+                    if bv_match:
+                        # 这里使用BV号的hash作为临时aid
+                        aid = abs(hash(bv_match.group(1))) % (10**9)
+                
+                # 提取标题
+                title_elem = card.find('a', {'title': True}) or card.find('h3') or card.find('h4')
+                title = title_elem.get('title', '') or title_elem.get_text(strip=True) if title_elem else ''
+                
+                # 提取播放量和评论数
+                view_count = 0
+                comment_count = 0
+                
+                # 查找统计数据
+                stats_container = card.find('div', class_=re.compile(r'(stats|count|data)'))
+                if stats_container:
+                    spans = stats_container.find_all('span')
+                    for i, span in enumerate(spans):
+                        text = span.get_text(strip=True)
+                        number = self._parse_stats_number(text)
+                        if i == 0:  # 通常第一个是播放量
+                            view_count = number
+                        elif i == 1:  # 第二个是评论数
+                            comment_count = number
+                
+                if aid > 0:
+                    videos.append({
+                        'aid': aid,
+                        'view': view_count,
+                        'comment': comment_count,
+                        'title': title,
+                        'created': int(time.time())  # 当前时间戳，因为HTML中难以提取准确的发布时间
+                    })
+                    
+            except Exception as e:
+                logger.debug(f"解析视频卡片失败: {e}")
+                continue
+        
+        logger.info(f"从HTML元素解析到 {len(videos)} 个视频")
+        return videos
+    
+    def _parse_stats_number(self, text):
+        """解析统计数字，支持中文数字格式"""
+        if not text:
+            return 0
+            
+        # 移除非数字字符，保留数字、小数点和中文单位
+        text = re.sub(r'[^\d.\u4e00-\u9fff万千百十亿]', '', text)
+        
+        try:
+            # 处理中文数字单位
+            if '万' in text:
+                num_str = text.replace('万', '')
+                if num_str:
+                    return int(float(num_str) * 10000)
+            elif '千' in text:
+                num_str = text.replace('千', '')
+                if num_str:
+                    return int(float(num_str) * 1000)
+            elif '百' in text:
+                num_str = text.replace('百', '')
+                if num_str:
+                    return int(float(num_str) * 100)
+            elif '亿' in text:
+                num_str = text.replace('亿', '')
+                if num_str:
+                    return int(float(num_str) * 100000000)
+            else:
+                # 纯数字
+                num_match = re.search(r'[\d.]+', text)
+                if num_match:
+                    return int(float(num_match.group()))
+        except (ValueError, AttributeError):
+            pass
+            
+        return 0
+
+
 async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True, extended_pages=False):
     """
-    获取指定日期范围内的视频数据 (支持API和浏览器模拟两种模式)
+    获取指定日期范围内的视频数据 (支持API、浏览器模拟和Playwright三种模式)
     :param uid: UP主UID (2137589551)
     :param start_date: 起始日期 (YYYY-MM-DD)
     :param end_date: 结束日期 (YYYY-MM-DD)
-    :param mode: 获取模式 ("api", "browser", "auto")
+    :param mode: 获取模式 ("api", "browser", "playwright", "auto")
         - "api": 使用bilibili-api-python库 (快速但可能触发412错误)
         - "browser": 使用浏览器模拟 (慢但避免安全风控)
+        - "playwright": 使用Playwright真实浏览器自动化 (最强反检测能力)
         - "auto": 自动选择 (优先API，失败时切换到浏览器模拟)
     :param use_fallback: 保留参数以保持兼容性 (已停用模拟数据功能)
     :param extended_pages: 是否启用扩展页数爬取 (用于历史数据计算，获取更多视频)
@@ -378,12 +676,16 @@ async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True
                 logger.warning(f"API模式失败: {error_msg}，切换到浏览器模拟模式")
                 return await fetch_videos_browser(uid, start_date, end_date, use_fallback, extended_pages)
     
+    elif mode == "playwright":
+        logger.info(f"开始使用Playwright模式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
+        return await fetch_videos_playwright(uid, start_date, end_date, use_fallback, extended_pages)
+    
     elif mode == "browser" or mode == "auto":
         logger.info(f"开始使用浏览器模拟方式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
         return await fetch_videos_browser(uid, start_date, end_date, use_fallback, extended_pages)
     
     else:
-        raise ValueError(f"不支持的模式: {mode}. 支持的模式: 'api', 'browser', 'auto'")
+        raise ValueError(f"不支持的模式: {mode}. 支持的模式: 'api', 'browser', 'playwright', 'auto'")
 
 
 async def fetch_videos_api(uid, start_date, end_date, extended_pages=False):
@@ -522,6 +824,95 @@ async def fetch_videos_browser(uid, start_date, end_date, use_fallback=True, ext
     raise Exception("无法获取视频数据")
 
 
+async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, extended_pages=False, headless=True):
+    """
+    使用Playwright真实浏览器获取视频数据
+    :param uid: UP主UID (2137589551)
+    :param start_date: 起始日期 (YYYY-MM-DD)
+    :param end_date: 结束日期 (YYYY-MM-DD)
+    :param use_fallback: 保留参数以保持兼容性
+    :param extended_pages: 是否启用扩展页数爬取 (获取更多视频数据，用于历史计算)
+    :param headless: 是否使用无头模式
+    :return: 视频列表
+    """
+    
+    if not PLAYWRIGHT_AVAILABLE:
+        raise ImportError("Playwright库不可用，请安装: pip install playwright && playwright install chromium")
+    
+    all_videos = []
+    
+    for attempt in range(API_REQUEST_CONFIG["retry_attempts"]):
+        try:
+            logger.info(f"Playwright模式 - 第 {attempt + 1} 次尝试获取视频数据...")
+            
+            async with PlaywrightBrowserSimulator(headless=headless) as browser:
+                page = 1
+                # 根据是否启用扩展模式动态设置页数限制
+                if extended_pages:
+                    max_pages = 15  # 扩展模式：最多获取15页数据
+                    logger.info("启用扩展爬取模式，将获取更多页面的视频数据")
+                else:
+                    max_pages = 5  # 标准模式：最多获取5页数据
+                
+                while page <= max_pages:
+                    try:
+                        logger.debug(f"获取第 {page} 页数据...")
+                        html_content = await browser.fetch_user_videos(uid, page)
+                        
+                        # 解析视频数据
+                        page_videos = browser.parse_videos_from_html(html_content)
+                        
+                        if not page_videos:
+                            logger.info(f"第 {page} 页没有更多视频数据")
+                            break
+                        
+                        # 筛选指定日期范围内的视频
+                        for video in page_videos:
+                            if video['created'] > 0:
+                                pubdate = datetime.datetime.fromtimestamp(video['created']).strftime("%Y-%m-%d")
+                                if start_date <= pubdate <= end_date:
+                                    video['pubdate'] = pubdate
+                                    all_videos.append(video)
+                        
+                        page += 1
+                        
+                        # 添加页面间隔，避免被检测为爬虫
+                        if page <= max_pages:
+                            await asyncio.sleep(random.uniform(3, 6))  # Playwright模式使用稍长的延迟
+                        
+                    except SecurityControlException:
+                        logger.error("触发安全风控，停止尝试")
+                        raise
+                    except Exception as e:
+                        logger.error(f"获取第 {page} 页数据失败: {e}")
+                        break
+                
+                if all_videos:
+                    logger.info(f"Playwright模式成功获取到 {len(all_videos)} 个符合条件的视频")
+                    return all_videos
+                else:
+                    raise Exception("未获取到任何视频数据")
+                    
+        except SecurityControlException:
+            logger.error("触发安全风控，停止重试")
+            break
+            
+        except Exception as e:
+            error_msg = str(e)
+            logger.warning(f"第 {attempt + 1} 次尝试失败: {error_msg}")
+            
+            if attempt < API_REQUEST_CONFIG["retry_attempts"] - 1:
+                delay = API_REQUEST_CONFIG["retry_delay"] * (2 ** attempt)
+                logger.info(f"将在 {delay} 秒后重试...")
+                await asyncio.sleep(delay)
+            else:
+                logger.error("所有重试尝试均失败")
+    
+    # 如果所有重试尝试均失败，抛出最终错误
+    logger.error("所有重试尝试均失败")
+    raise Exception("无法获取视频数据")
+
+
 class SecurityControlException(Exception):
     """Bilibili安全风控异常"""
     pass
@@ -555,12 +946,13 @@ def get_api_troubleshooting_info():
     info = [
         "=== 李大霄指数计算程序故障排除信息 ===",
         f"当前时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        f"bilibili-api-python可用: {'是' if API_MODE_AVAILABLE else '否'}",
+        f"Playwright可用: {'是' if PLAYWRIGHT_AVAILABLE else '否'}",
         "",
         "支持的获取模式:",
         "1. API模式 (api): 使用bilibili-api-python库，速度快但可能触发412错误",
         "2. 浏览器模拟模式 (browser): 使用HTTP请求模拟浏览器，慢但避免风控",
-        "3. 自动模式 (auto): 优先使用API，失败时自动切换到浏览器模拟",
+        "3. Playwright模式 (playwright): 使用真实浏览器自动化，最强反检测能力",
+        "4. 自动模式 (auto): 优先使用API，失败时自动切换到浏览器模拟",
         "",
         "当前配置:",
         f"- 超时时间: {API_REQUEST_CONFIG.get('timeout', 'N/A')} 秒",
@@ -570,8 +962,9 @@ def get_api_troubleshooting_info():
         "",
         "推荐解决方案:",
         "1. 使用配置工具: python3 api_config_tool.py safe",
-        "2. 尝试浏览器模拟模式: python3 lidaxiao.py --mode browser",
-        "3. 使用演示数据: python3 demo.py"
+        "2. 尝试Playwright模式: python3 lidaxiao.py --mode playwright",
+        "3. 尝试浏览器模拟模式: python3 lidaxiao.py --mode browser",
+        "4. 使用演示数据: python3 demo.py"
     ]
     return "\n".join(info)
     return f"""
