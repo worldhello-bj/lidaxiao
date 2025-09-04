@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-视频数据爬取模块 (支持API和Playwright两种模式)
-Video Crawling Module (Supports both API and Playwright modes)
+视频数据爬取模块 (使用Playwright浏览器自动化)
+Video Crawling Module (Using Playwright Browser Automation)
 
-This module handles fetching video data from Bilibili using either:
-1. Direct API calls (bilibili-api-python library) - faster but may trigger 412 errors  
-2. Playwright browser automation - real browser with strongest anti-detection capabilities
+This module handles fetching video data from Bilibili using Playwright browser automation
+with real browser and strongest anti-detection capabilities.
 """
 
 import json
@@ -16,7 +15,7 @@ import asyncio
 import logging
 import time
 import re
-from config import API_REQUEST_CONFIG, ERROR_MESSAGES, BROWSER_CONFIG
+from config import BROWSER_CONFIG, ERROR_MESSAGES
 
 try:
     from bs4 import BeautifulSoup
@@ -26,18 +25,11 @@ except ImportError:
     logging.warning("BeautifulSoup4 not available, HTML parsing will be limited")
 
 try:
-    from bilibili_api import user
-    API_MODE_AVAILABLE = True
-except ImportError:
-    API_MODE_AVAILABLE = False
-    logging.warning("bilibili-api-python not available, only playwright mode will work")
-
-try:
     from playwright.async_api import async_playwright
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
-    logging.warning("Playwright not available, playwright mode disabled")
+    logging.warning("Playwright not available, please install: pip install playwright && playwright install chromium")
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -620,106 +612,34 @@ class PlaywrightBrowserSimulator:
         return 0
 
 
-async def fetch_videos(uid, start_date, end_date, mode="auto", use_fallback=True, extended_pages=False, headless=None):
+async def fetch_videos(uid, start_date, end_date, extended_pages=False, headless=None):
     """
-    获取指定日期范围内的视频数据 (支持API和Playwright两种模式)
+    获取指定日期范围内的视频数据 (使用Playwright浏览器自动化)
+    
     :param uid: UP主UID (2137589551)
     :param start_date: 起始日期 (YYYY-MM-DD)
     :param end_date: 结束日期 (YYYY-MM-DD)
-    :param mode: 获取模式 ("api", "playwright", "auto")
-        - "api": 使用bilibili-api-python库 (快速但可能触发412错误)
-        - "playwright": 使用Playwright真实浏览器自动化 (最强反检测能力)
-        - "auto": 自动选择 (优先API，失败时切换到Playwright)
-    :param use_fallback: 保留参数以保持兼容性 (已停用模拟数据功能)
     :param extended_pages: 是否启用扩展页数爬取 (用于历史数据计算，获取更多视频)
-    :param headless: 是否使用无头模式 (仅对Playwright模式有效, None: 使用配置文件设置)
+    :param headless: 是否使用无头模式 (None: 使用配置文件设置, True/False: 覆盖配置)
     :return: 视频列表 [{"aid": 视频ID, "view": 播放量, "comment": 评论数, "pubdate": 发布日期, "title": 标题, "created": 时间戳}]
     """
     
-    if mode == "api" or (mode == "auto" and API_MODE_AVAILABLE):
-        try:
-            logger.info(f"开始使用API模式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
-            return await fetch_videos_api(uid, start_date, end_date, extended_pages)
-        except Exception as e:
-            error_msg = str(e)
-            if mode == "api":
-                # API模式失败时直接抛出错误
-                logger.error(f"API模式获取失败: {error_msg}")
-                raise
-            else:
-                # auto模式下，API失败时切换到Playwright
-                logger.warning(f"API模式失败: {error_msg}，切换到Playwright模式")
-                return await fetch_videos_playwright(uid, start_date, end_date, use_fallback, extended_pages, headless)
+    if not PLAYWRIGHT_AVAILABLE:
+        raise ImportError("Playwright库不可用，请安装: pip install playwright && playwright install chromium")
     
-    elif mode == "playwright" or mode == "auto":
-        logger.info(f"开始使用Playwright模式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
-        return await fetch_videos_playwright(uid, start_date, end_date, use_fallback, extended_pages, headless)
-    
-    else:
-        raise ValueError(f"不支持的模式: {mode}. 支持的模式: 'api', 'playwright', 'auto'。browser模式已移除，请使用playwright模式替代。")
-
-
-async def fetch_videos_api(uid, start_date, end_date, extended_pages=False):
-    """
-    使用bilibili-api-python库获取视频数据 (传统API模式)
-    :param uid: UP主UID (2137589551)
-    :param start_date: 起始日期 (YYYY-MM-DD)
-    :param end_date: 结束日期 (YYYY-MM-DD)
-    :param extended_pages: 是否启用扩展页数爬取 (API模式中此参数将被忽略，API会尝试获取所有可用视频)
-    :return: 视频列表
-    """
-    if not API_MODE_AVAILABLE:
-        raise ImportError("bilibili-api-python库不可用，请安装或使用浏览器模拟模式")
-    
-    u = user.User(uid)
-    all_videos = []
-    pn = 1
-    
-    logger.info("使用API模式获取视频数据...")
-    
-    while True:
-        try:
-            # 调用B站API获取分页视频列表
-            res = await u.get_videos(pn=pn, order=user.VideoOrder.PUBDATE)
-            if not res["list"]["vlist"]:
-                break
-                
-            for video_info in res["list"]["vlist"]:
-                pubdate = datetime.datetime.fromtimestamp(video_info["created"]).strftime("%Y-%m-%d")
-                # 仅保留指定日期范围内的视频
-                if start_date <= pubdate <= end_date:
-                    all_videos.append({
-                        "aid": video_info["aid"],
-                        "view": int(video_info["play"]),
-                        "comment": int(video_info["comment"]),
-                        "pubdate": pubdate,
-                        "title": video_info["title"],
-                        "created": video_info["created"]
-                    })
-            pn += 1
-            
-            # 添加请求间隔，避免触发风控
-            await asyncio.sleep(API_REQUEST_CONFIG.get("rate_limit_delay", 1))
-            
-        except Exception as e:
-            if "412" in str(e) or "安全风控" in str(e):
-                raise SecurityControlException(f"API模式触发安全风控: {e}")
-            raise
-    
-    logger.info(f"API模式成功获取 {len(all_videos)} 个视频")
-    return all_videos
+    logger.info(f"开始使用Playwright模式获取用户 {uid} 在 {start_date} 至 {end_date} 期间的视频数据")
+    return await fetch_videos_playwright(uid, start_date, end_date, extended_pages, headless)
 
 
 
 
-
-async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, extended_pages=False, headless=None):
+async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=False, headless=None):
     """
     使用Playwright真实浏览器获取视频数据
+    
     :param uid: UP主UID (2137589551)
     :param start_date: 起始日期 (YYYY-MM-DD)
     :param end_date: 结束日期 (YYYY-MM-DD)
-    :param use_fallback: 保留参数以保持兼容性
     :param extended_pages: 是否启用扩展页数爬取 (获取更多视频数据，用于历史计算)
     :param headless: 是否使用无头模式 (None: 使用配置文件设置, True/False: 覆盖配置)
     :return: 视频列表
@@ -734,7 +654,7 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
     
     all_videos = []
     
-    for attempt in range(API_REQUEST_CONFIG["retry_attempts"]):
+    for attempt in range(BROWSER_CONFIG["retry_attempts"]):
         try:
             logger.info(f"Playwright模式 - 第 {attempt + 1} 次尝试获取视频数据...")
             
@@ -745,10 +665,10 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
                 
                 # 根据是否启用扩展模式动态设置页数限制
                 if extended_pages:
-                    max_pages = 25  # 扩展模式：最多获取15页数据
+                    max_pages = 25  # 扩展模式：最多获取25页数据
                     logger.info("启用扩展爬取模式，将获取更多页面的视频数据")
                 else:
-                    max_pages = 10  # 标准模式：最多获取5页数据
+                    max_pages = 10  # 标准模式：最多获取10页数据
                 
                 while page <= max_pages:
                     try:
@@ -789,11 +709,8 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
                         
                         # 添加页面间隔，避免被检测为爬虫
                         if page <= max_pages:
-                            await asyncio.sleep(random.uniform(3, 6))  # Playwright模式使用稍长的延迟
+                            await asyncio.sleep(random.uniform(3, 6))  # 页面间延迟
                         
-                    except SecurityControlException:
-                        logger.error("触发安全风控，停止尝试")
-                        raise
                     except Exception as e:
                         consecutive_failures += 1
                         logger.error(f"获取第 {page} 页数据失败 (连续失败 {consecutive_failures} 次): {e}")
@@ -817,16 +734,12 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
                 else:
                     raise Exception(f"未获取到符合日期范围 {start_date} 至 {end_date} 的任何视频数据")
                     
-        except SecurityControlException:
-            logger.error("触发安全风控，停止重试")
-            break
-            
         except Exception as e:
             error_msg = str(e)
             logger.warning(f"第 {attempt + 1} 次尝试失败: {error_msg}")
             
-            if attempt < API_REQUEST_CONFIG["retry_attempts"] - 1:
-                delay = API_REQUEST_CONFIG["retry_delay"] * (2 ** attempt)
+            if attempt < BROWSER_CONFIG["retry_attempts"] - 1:
+                delay = BROWSER_CONFIG["retry_delay"] * (2 ** attempt)
                 logger.info(f"将在 {delay} 秒后重试...")
                 await asyncio.sleep(delay)
             else:
@@ -837,57 +750,49 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
     raise Exception("无法获取视频数据")
 
 
-class SecurityControlException(Exception):
-    """Bilibili安全风控异常"""
-    pass
-
-
-
-
-
-def configure_api_settings(**kwargs):
+def configure_browser_settings(**kwargs):
     """
-    配置API和Playwright设置
+    配置浏览器设置
     
     可用参数:
     - timeout: 超时时间
     - retry_attempts: 重试次数
     - retry_delay: 重试延迟
-    - rate_limit_delay: 请求间隔
+    - page_delay: 页面间隔
+    - headless: 是否无头模式
+    - browser_type: 浏览器类型
     """
     for key, value in kwargs.items():
-        if key in API_REQUEST_CONFIG:
-            API_REQUEST_CONFIG[key] = value
-            logger.info(f"已更新 {key} = {value}")
+        if key in BROWSER_CONFIG:
+            BROWSER_CONFIG[key] = value
+            logger.info(f"已更新浏览器配置 {key} = {value}")
         else:
             logger.warning(f"未知配置项: {key}")
 
 
-def get_api_troubleshooting_info():
+def get_troubleshooting_info():
     """
-    返回API故障排除信息 (支持API和Playwright两种模式)
+    返回故障排除信息
     """
     info = [
         "=== 李大霄指数计算程序故障排除信息 ===",
         f"当前时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"Playwright可用: {'是' if PLAYWRIGHT_AVAILABLE else '否'}",
         "",
-        "支持的获取模式:",
-        "1. API模式 (api): 使用bilibili-api-python库，速度快但可能触发412错误",
-        "2. Playwright模式 (playwright): 使用真实浏览器自动化，最强反检测能力",
-        "3. 自动模式 (auto): 优先使用API，失败时自动切换到Playwright",
+        "获取模式: Playwright浏览器自动化 (最强反检测能力)",
         "",
         "当前配置:",
-        f"- 超时时间: {API_REQUEST_CONFIG.get('timeout', 'N/A')} 秒",
-        f"- 重试次数: {API_REQUEST_CONFIG.get('retry_attempts', 'N/A')} 次",
-        f"- 重试延迟: {API_REQUEST_CONFIG.get('retry_delay', 'N/A')} 秒",
-        f"- 请求间隔: {API_REQUEST_CONFIG.get('rate_limit_delay', 'N/A')} 秒",
+        f"- 超时时间: {BROWSER_CONFIG.get('timeout', 'N/A')} 秒",
+        f"- 重试次数: {BROWSER_CONFIG.get('retry_attempts', 'N/A')} 次",
+        f"- 重试延迟: {BROWSER_CONFIG.get('retry_delay', 'N/A')} 秒",
+        f"- 页面间隔: {BROWSER_CONFIG.get('page_delay', 'N/A')} 秒",
+        f"- 无头模式: {BROWSER_CONFIG.get('headless', 'N/A')}",
+        f"- 浏览器类型: {BROWSER_CONFIG.get('browser_type', 'N/A')}",
         "",
         "推荐解决方案:",
-        "1. 使用配置工具: python3 api_config_tool.py safe",
-        "2. 尝试Playwright模式: python3 lidaxiao.py --mode playwright",
-        "3. 使用演示数据: python3 demo.py",
-        "",
-        "注意: browser模式已移除，请使用playwright模式替代"
+        "1. 检查网络连接和防火墙设置",
+        "2. 确保Playwright已正确安装: pip install playwright && playwright install chromium",
+        "3. 尝试无头模式: python3 lidaxiao.py --headless",
+        "4. 运行demo.py查看演示功能",
     ]
     return "\n".join(info)
