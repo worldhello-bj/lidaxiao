@@ -257,7 +257,7 @@ def test_batch_calculation():
     date_range = ["2024-01-08", "2024-01-09", "2024-01-10"]
     
     results = calculate_batch_historical(
-        mock_videos, date_range, current_date, "exponential"
+        mock_videos, date_range, current_date
     )
     
     assert len(results) == 3
