@@ -745,10 +745,10 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
                 
                 # 根据是否启用扩展模式动态设置页数限制
                 if extended_pages:
-                    max_pages = 15  # 扩展模式：最多获取15页数据
+                    max_pages = 25  # 扩展模式：最多获取15页数据
                     logger.info("启用扩展爬取模式，将获取更多页面的视频数据")
                 else:
-                    max_pages = 5  # 标准模式：最多获取5页数据
+                    max_pages = 10  # 标准模式：最多获取5页数据
                 
                 while page <= max_pages:
                     try:

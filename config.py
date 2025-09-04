@@ -43,7 +43,7 @@ API_REQUEST_CONFIG = {
 
 # 浏览器配置 (用于Playwright模式)
 BROWSER_CONFIG = {
-    "headless": True,           # 是否使用无头模式 (True: 后台运行, False: 显示浏览器窗口)
+    "headless": False,           # 是否使用无头模式 (True: 后台运行, False: 显示浏览器窗口)
     "browser_type": "chromium", # 浏览器类型: chromium, firefox, webkit
 }
 
