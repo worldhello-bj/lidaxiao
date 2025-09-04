@@ -105,7 +105,6 @@ def demo_detailed_calculation():
     print("💡 report.py 使用说明：")
     print("   python3 report.py                    # 生成今日详细报告")
     print("   python3 report.py --date 2024-01-15  # 生成指定日期报告")
-    print("   python3 report.py --mode playwright  # 使用指定爬取模式")
     print()
 
 def demo_usage_comparison():

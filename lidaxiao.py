@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-李大霄指数计算程序 (支持API和Playwright两种模式)
-Li Daxiao Index Calculation Program (Supports both API and Playwright modes)
+李大霄指数计算程序 (使用Playwright浏览器自动化)
+Li Daxiao Index Calculation Program (Using Playwright Browser Automation)
 
 This program crawls Bilibili videos from a specific UP主 (UID: 2137589551),
 calculates an index based on views and comments, and generates visualizations.
 
-Supported modes:
-- API mode: Fast but may trigger 412 security control errors
-- Playwright mode: Real browser automation with strongest anti-detection capabilities  
-- Auto mode: Tries API first, falls back to Playwright if needed
+Uses Playwright browser automation with strongest anti-detection capabilities.
 """
 
 import datetime
@@ -18,7 +15,7 @@ import asyncio
 import argparse
 
 from config import BILIBILI_UID, DEFAULT_DAYS_RANGE
-from crawler import fetch_videos, get_api_troubleshooting_info
+from crawler import fetch_videos, get_troubleshooting_info
 from calculator import calculate_index
 from storage import save_all_data, load_history_data
 from visualizer import generate_all_charts, generate_historical_charts
@@ -202,9 +199,7 @@ def validate_video_data_sufficiency(videos, args):
 
 async def main():
     # 解析命令行参数
-    parser = argparse.ArgumentParser(description='李大霄指数计算程序')
-    parser.add_argument('--mode', choices=['api', 'playwright', 'auto'], default='auto',
-                       help='获取模式: api(快速但可能触发412), playwright(真实浏览器，最强反检测), auto(自动选择)')
+    parser = argparse.ArgumentParser(description='李大霄指数计算程序 (使用Playwright浏览器自动化)')
     parser.add_argument('--headless', action='store_true', default=None,
                        help='强制使用无头模式 (后台运行浏览器，用于服务器环境)')
     parser.add_argument('--no-headless', action='store_true', default=None,
@@ -263,7 +258,7 @@ async def run_historical_mode(args, headless=None):
         # 获取当前视频数据作为基础
         print("正在获取视频数据作为历史数据回推基础...")
         videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=end_date, 
-                                  mode=args.mode, extended_pages=fetch_all_pages, headless=headless)
+                                  extended_pages=fetch_all_pages, headless=headless)
         print(f"获取到 {len(videos)} 个视频")
         
         # 验证视频数据是否足够
@@ -553,19 +548,13 @@ async def run_current_mode(args, headless=None):
     d = datetime.date.today().strftime("%Y-%m-%d")
     start_date = (datetime.date.today() - datetime.timedelta(days=DEFAULT_DAYS_RANGE-1)).strftime("%Y-%m-%d")
     
-    mode_descriptions = {
-        'api': '快速API模式',
-        'playwright': 'Playwright自动化模式',
-        'auto': '智能自动模式'
-    }
-    
-    print(f"开始计算李大霄指数 ({mode_descriptions[args.mode]})...")
+    print(f"开始计算李大霄指数 (Playwright浏览器自动化模式)...")
     print(f"日期范围: {start_date} 至 {d}")
     
     try:
         # 爬取数据
         print("正在爬取视频数据...")
-        videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=d, mode=args.mode, headless=headless)
+        videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=d, headless=headless)
         print(f"获取到 {len(videos)} 个视频")
         
         # 计算指数
@@ -593,21 +582,21 @@ async def run_current_mode(args, headless=None):
         print(f"执行过程中发生错误: {error_msg}")
         
         # 提供针对性的错误处理建议
-        if "412" in error_msg or "安全风控" in error_msg:
-            print("\n这是Bilibili安全风控错误。解决建议:")
-            print("1. 尝试Playwright模式: python3 lidaxiao.py --mode playwright")
-            print("2. 使用安全配置: python3 api_config_tool.py safe")
-            print("3. 等待一段时间后重试")
-            print("4. 运行demo.py查看演示功能")
-        elif "address associated with hostname" in error_msg:
+        if "address associated with hostname" in error_msg:
             print("\n这是网络连接问题。解决建议:")
             print("1. 检查网络连接") 
             print("2. 检查防火墙设置")
-            print("3. 尝试Playwright模式: python3 lidaxiao.py --mode playwright")
+            print("3. 尝试无头模式: python3 lidaxiao.py --headless")
+            print("4. 运行demo.py查看演示功能")
+        elif "Playwright" in error_msg:
+            print("\n这是Playwright相关问题。解决建议:")
+            print("1. 确保Playwright已安装: pip install playwright")
+            print("2. 安装浏览器: playwright install chromium")
+            print("3. 检查系统兼容性")
             print("4. 运行demo.py查看演示功能")
         
         print(f"\n详细故障排除信息:")
-        print(get_api_troubleshooting_info())
+        print(get_troubleshooting_info())
 
 
 if __name__ == "__main__":

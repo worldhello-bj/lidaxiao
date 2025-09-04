@@ -38,11 +38,10 @@ def print_subsection(title, width=60):
     print("-" * width)
 
 
-async def generate_detailed_report(mode='auto', target_date=None):
+async def generate_detailed_report(target_date=None):
     """
     生成详细的计算报告
     
-    :param mode: 爬取模式 ('api', 'playwright', 'auto')
     :param target_date: 目标日期，如果为None则使用今天
     """
     if target_date is None:
@@ -58,7 +57,7 @@ async def generate_detailed_report(mode='auto', target_date=None):
     print_separator("李大霄指数详细计算报告")
     print(f"生成时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"目标日期: {target_date}")
-    print(f"爬取模式: {mode}")
+    print(f"爬取模式: Playwright浏览器自动化")
     print(f"默认天数范围: {DEFAULT_DAYS_RANGE}")
     print()
     
@@ -77,7 +76,7 @@ async def generate_detailed_report(mode='auto', target_date=None):
         # 2. 爬取视频数据
         print_subsection("第二步: 视频数据爬取")
         print("正在爬取视频数据...")
-        videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=target_date, mode=mode)
+        videos = await fetch_videos(uid=BILIBILI_UID, start_date=start_date, end_date=target_date)
         print(f"成功获取 {len(videos)} 个视频")
         print()
         
@@ -187,16 +186,14 @@ async def generate_detailed_report(mode='auto', target_date=None):
 
 async def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description='李大霄指数详细计算报告生成器')
-    parser.add_argument('--mode', choices=['api', 'playwright', 'auto'], default='auto',
-                       help='爬取模式: api(快速但可能触发412), playwright(真实浏览器), auto(自动选择)')
+    parser = argparse.ArgumentParser(description='李大霄指数详细计算报告生成器 (使用Playwright浏览器自动化)')
     parser.add_argument('--date', 
                        help='目标日期 (YYYY-MM-DD)，不指定则使用今天')
     
     args = parser.parse_args()
     
     try:
-        await generate_detailed_report(mode=args.mode, target_date=args.date)
+        await generate_detailed_report(target_date=args.date)
     except KeyboardInterrupt:
         print("\n用户取消操作")
     except Exception as e:

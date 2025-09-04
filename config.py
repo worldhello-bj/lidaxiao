@@ -31,20 +31,14 @@ CHART_FIGSIZE_NO_VIDEO = (8, 5)
 # 视频标题截断长度
 TITLE_TRUNCATE_LENGTH = 12
 
-# API 请求配置 (用于处理412安全风控错误)
-API_REQUEST_CONFIG = {
-    "timeout": 10,              # 请求超时时间(秒)
-    "retry_attempts": 3,        # 重试次数
-    "retry_delay": 2,           # 重试延迟(秒)
-    "rate_limit_delay": 1,      # 请求间隔(秒)
-    "verify_ssl": True,         # SSL验证
-    "trust_env": True,          # 信任环境代理设置
-}
-
-# 浏览器配置 (用于Playwright模式)
+# 浏览器配置 (Playwright模式)
 BROWSER_CONFIG = {
     "headless": False,           # 是否使用无头模式 (True: 后台运行, False: 显示浏览器窗口)
-    "browser_type": "chromium", # 浏览器类型: chromium, firefox, webkit
+    "browser_type": "chromium",  # 浏览器类型: chromium, firefox, webkit
+    "timeout": 10,               # 请求超时时间(秒)
+    "retry_attempts": 3,         # 重试次数
+    "retry_delay": 2,            # 重试延迟(秒)
+    "page_delay": 1,             # 页面间隔(秒)
 }
 
 # 历史指数计算配置 (已简化 - 不再使用数学模型)
@@ -54,6 +48,6 @@ HISTORICAL_APPROXIMATION_MODE = "current_data_as_historical"
 
 # 错误消息配置
 ERROR_MESSAGES = {
-    "412": "触发了Bilibili安全风控策略(412错误)。建议: 1)减少请求频率 2)检查网络环境 3)使用代理",
     "network": "网络连接失败。请检查网络连接和防火墙设置",
+    "playwright": "Playwright浏览器启动失败。请确保已正确安装: pip install playwright && playwright install chromium",
 }
