@@ -116,6 +116,225 @@ class HistoricalCalculator:
                 })
         
         return results
+
+    def debug_calculation_process(self, videos: List[Dict], target_date: str,
+                                current_date: Optional[str] = None) -> Dict:
+        """
+        调试计算过程 - 输出详细的计算步骤和中间结果
+        Debug calculation process - output detailed calculation steps and intermediate results
+        
+        :param videos: 当前视频数据列表
+        :param target_date: 目标历史日期 (YYYY-MM-DD)  
+        :param current_date: 当前日期 (YYYY-MM-DD)，默认为今天
+        :return: 详细的调试信息字典
+        """
+        from calculator import calculate_index, get_video_details
+        
+        if current_date is None:
+            current_date = datetime.date.today().strftime("%Y-%m-%d")
+            
+        debug_info = {
+            "target_date": target_date,
+            "current_date": current_date,
+            "input_videos_count": len(videos),
+            "calculation_steps": []
+        }
+        
+        try:
+            # 步骤1: 验证日期
+            current_dt = datetime.datetime.strptime(current_date, "%Y-%m-%d").date()
+            target_dt = datetime.datetime.strptime(target_date, "%Y-%m-%d").date()
+            
+            debug_info["calculation_steps"].append({
+                "step": 1,
+                "description": "日期验证",
+                "target_date_parsed": str(target_dt),
+                "current_date_parsed": str(current_dt),
+                "date_valid": target_dt <= current_dt
+            })
+            
+            if target_dt > current_dt:
+                debug_info["error"] = f"目标日期 {target_date} 不能晚于当前日期 {current_date}"
+                return debug_info
+            
+            # 步骤2: 计算有效计算日期（6天规则）
+            effective_target_dt = target_dt - datetime.timedelta(days=6)
+            
+            debug_info["calculation_steps"].append({
+                "step": 2,
+                "description": "应用6天规则",
+                "original_target": str(target_dt),
+                "effective_target": str(effective_target_dt),
+                "days_subtracted": 6
+            })
+            
+            # 步骤3: 分析输入视频的日期分布
+            video_date_analysis = {
+                "videos_with_pubdate": 0,
+                "videos_with_created": 0,
+                "videos_without_date": 0,
+                "date_range": {"earliest": None, "latest": None},
+                "videos_by_date": {}
+            }
+            
+            for video in videos:
+                video_date = None
+                date_source = None
+                
+                if 'pubdate' in video and video['pubdate']:
+                    try:
+                        video_date = datetime.datetime.strptime(video['pubdate'], "%Y-%m-%d").date()
+                        video_date_analysis["videos_with_pubdate"] += 1
+                        date_source = "pubdate"
+                    except (ValueError, TypeError):
+                        pass
+                
+                if video_date is None and 'created' in video and video['created']:
+                    try:
+                        video_date = datetime.datetime.fromtimestamp(video['created']).date()
+                        video_date_analysis["videos_with_created"] += 1
+                        date_source = "created"
+                    except (ValueError, TypeError, OSError):
+                        pass
+                
+                if video_date is None:
+                    video_date_analysis["videos_without_date"] += 1
+                else:
+                    # 更新日期范围
+                    if video_date_analysis["date_range"]["earliest"] is None or video_date < video_date_analysis["date_range"]["earliest"]:
+                        video_date_analysis["date_range"]["earliest"] = video_date
+                    if video_date_analysis["date_range"]["latest"] is None or video_date > video_date_analysis["date_range"]["latest"]:
+                        video_date_analysis["date_range"]["latest"] = video_date
+                    
+                    # 按日期统计视频数量
+                    date_str = video_date.strftime("%Y-%m-%d")
+                    if date_str not in video_date_analysis["videos_by_date"]:
+                        video_date_analysis["videos_by_date"][date_str] = []
+                    video_date_analysis["videos_by_date"][date_str].append({
+                        "title": video.get("title", "Unknown"),
+                        "view": video.get("view", 0),
+                        "comment": video.get("comment", 0),
+                        "date_source": date_source
+                    })
+            
+            debug_info["calculation_steps"].append({
+                "step": 3,
+                "description": "视频日期分析",
+                **video_date_analysis,
+                "date_range_str": {
+                    "earliest": str(video_date_analysis["date_range"]["earliest"]) if video_date_analysis["date_range"]["earliest"] else None,
+                    "latest": str(video_date_analysis["date_range"]["latest"]) if video_date_analysis["date_range"]["latest"] else None
+                }
+            })
+            
+            # 步骤4: 筛选符合条件的视频
+            filtered_videos = []
+            filtering_details = {
+                "videos_before_effective_date": 0,
+                "videos_after_effective_date": 0,
+                "videos_no_date_included": 0,
+                "filtered_videos_details": []
+            }
+            
+            for video in videos:
+                include_video = False
+                filter_reason = ""
+                
+                if 'pubdate' in video and video['pubdate']:
+                    try:
+                        video_date = datetime.datetime.strptime(video['pubdate'], "%Y-%m-%d").date()
+                        if video_date <= effective_target_dt:
+                            include_video = True
+                            filtering_details["videos_before_effective_date"] += 1
+                            filter_reason = f"pubdate {video_date} <= {effective_target_dt}"
+                        else:
+                            filtering_details["videos_after_effective_date"] += 1
+                            filter_reason = f"pubdate {video_date} > {effective_target_dt} (excluded)"
+                    except (ValueError, TypeError):
+                        filter_reason = "invalid pubdate format"
+                elif 'created' in video and video['created']:
+                    try:
+                        video_date = datetime.datetime.fromtimestamp(video['created']).date()
+                        if video_date <= effective_target_dt:
+                            include_video = True
+                            filtering_details["videos_before_effective_date"] += 1
+                            filter_reason = f"created {video_date} <= {effective_target_dt}"
+                        else:
+                            filtering_details["videos_after_effective_date"] += 1
+                            filter_reason = f"created {video_date} > {effective_target_dt} (excluded)"
+                    except (ValueError, TypeError, OSError):
+                        filter_reason = "invalid created timestamp"
+                else:
+                    include_video = True
+                    filtering_details["videos_no_date_included"] += 1
+                    filter_reason = "no date info - included for compatibility"
+                
+                if include_video:
+                    filtered_videos.append(video)
+                    filtering_details["filtered_videos_details"].append({
+                        "title": video.get("title", "Unknown"),
+                        "view": video.get("view", 0),
+                        "comment": video.get("comment", 0),
+                        "reason": filter_reason
+                    })
+            
+            debug_info["calculation_steps"].append({
+                "step": 4,
+                "description": "视频筛选",
+                "effective_date": str(effective_target_dt),
+                "total_input_videos": len(videos),
+                "filtered_videos_count": len(filtered_videos),
+                **filtering_details
+            })
+            
+            # 步骤5: 计算指数
+            if filtered_videos:
+                detailed_videos = get_video_details(filtered_videos)
+                total_index = calculate_index(filtered_videos)
+                
+                debug_info["calculation_steps"].append({
+                    "step": 5,
+                    "description": "指数计算",
+                    "filtered_videos_count": len(filtered_videos),
+                    "total_index": total_index,
+                    "video_contributions": [
+                        {
+                            "title": v.get("title", "Unknown"),
+                            "view": v["view"],
+                            "comment": v["comment"],
+                            "contribution": v["contribution"]
+                        } for v in detailed_videos[:10]  # 只显示前10个
+                    ] + ([{"note": f"... 还有 {len(detailed_videos) - 10} 个视频"}] if len(detailed_videos) > 10 else [])
+                })
+                
+                debug_info["final_result"] = {
+                    "index": round(total_index, 2),
+                    "success": True
+                }
+            else:
+                debug_info["calculation_steps"].append({
+                    "step": 5,
+                    "description": "指数计算",
+                    "filtered_videos_count": 0,
+                    "total_index": 0.0,
+                    "note": "没有符合条件的视频，返回0.0"
+                })
+                
+                debug_info["final_result"] = {
+                    "index": 0.0,
+                    "success": True,
+                    "note": "无符合条件的视频"
+                }
+                
+        except Exception as e:
+            debug_info["error"] = str(e)
+            debug_info["final_result"] = {
+                "index": 0.0,
+                "success": False,
+                "error": str(e)
+            }
+        
+        return debug_info
     
     def generate_date_range(self, start_date: str, end_date: str) -> List[str]:
         """
@@ -175,3 +394,83 @@ def calculate_batch_historical(videos: List[Dict], date_range: List[str],
     """
     calculator = create_historical_calculator()
     return calculator.calculate_batch_historical(videos, date_range, current_date)
+
+
+def debug_calculation_process(videos: List[Dict], target_date: str,
+                            current_date: Optional[str] = None) -> Dict:
+    """
+    便捷函数：调试单个历史日期的计算过程
+    Debug function: debug calculation process for a single historical date
+    
+    :param videos: 当前视频数据列表
+    :param target_date: 目标历史日期 (YYYY-MM-DD)
+    :param current_date: 当前日期，默认为今天
+    :return: 详细的调试信息字典
+    """
+    calculator = create_historical_calculator()
+    return calculator.debug_calculation_process(videos, target_date, current_date)
+
+
+def debug_batch_calculation(videos: List[Dict], date_range: List[str], 
+                          current_date: Optional[str] = None, 
+                          sample_dates: int = 5) -> Dict:
+    """
+    调试批量历史计算过程 - 分析多个日期的计算过程
+    Debug batch historical calculation process - analyze calculation for multiple dates
+    
+    :param videos: 当前视频数据列表
+    :param date_range: 目标日期列表
+    :param current_date: 当前日期，默认为今天
+    :param sample_dates: 采样调试的日期数量（从头尾各取几个）
+    :return: 批量调试信息
+    """
+    calculator = create_historical_calculator()
+    
+    # 选择采样日期进行详细调试
+    sample_indices = []
+    if len(date_range) <= sample_dates * 2:
+        sample_indices = list(range(len(date_range)))
+    else:
+        # 取前面和后面的日期
+        sample_indices = list(range(sample_dates)) + list(range(len(date_range) - sample_dates, len(date_range)))
+    
+    batch_debug = {
+        "total_dates": len(date_range),
+        "sampled_dates": len(sample_indices),
+        "date_range": {
+            "start": date_range[0],
+            "end": date_range[-1]
+        },
+        "sample_details": [],
+        "summary_analysis": {}
+    }
+    
+    # 详细调试采样日期
+    for i in sample_indices:
+        date = date_range[i]
+        debug_info = calculator.debug_calculation_process(videos, date, current_date)
+        batch_debug["sample_details"].append({
+            "index": i,
+            "date": date,
+            "debug_info": debug_info
+        })
+    
+    # 分析整体趋势
+    all_results = calculator.calculate_batch_historical(videos, date_range, current_date)
+    indices = [r["index"] for r in all_results if "error" not in r]
+    
+    if indices:
+        increasing_count = sum(1 for i in range(1, len(indices)) if indices[i] > indices[i-1])
+        
+        batch_debug["summary_analysis"] = {
+            "total_calculations": len(indices),
+            "min_index": min(indices),
+            "max_index": max(indices),
+            "mean_index": sum(indices) / len(indices),
+            "unique_values": len(set(indices)),
+            "increasing_transitions": increasing_count,
+            "increasing_percentage": (increasing_count / (len(indices) - 1) * 100) if len(indices) > 1 else 0,
+            "potential_stacking_issue": increasing_count / (len(indices) - 1) > 0.7 if len(indices) > 1 else False
+        }
+    
+    return batch_debug

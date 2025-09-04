@@ -27,17 +27,19 @@ from historical import calculate_historical_index, calculate_batch_historical, H
 
 def calculate_effective_target_date(target_date):
     """
-    计算有效的目标日期，减去6天（李大霄指数计算规则）
+    计算显示用的有效目标日期，减去6天（仅用于展示，不影响实际计算）
+    
+    注意：历史指数计算现在使用当前数据近似，不再根据此日期过滤视频
     
     :param target_date: 原始目标日期
-    :return: 有效目标日期（减去6天后）
+    :return: 有效目标日期（减去6天后，仅用于显示）
     """
     if isinstance(target_date, str):
         target_dt = datetime.datetime.strptime(target_date, "%Y-%m-%d").date()
     else:
         target_dt = target_date
     
-    # 李大霄指数计算规则：往回倒6天
+    # 计算显示用的有效日期（减去6天）
     effective_target = target_dt - datetime.timedelta(days=6)
     return effective_target
 
@@ -320,7 +322,7 @@ async def calculate_single_historical_date(videos, args, current_date, current_i
         # 将历史数据保存到累积数据中
         from storage import update_history_data
         update_history_data(target_date, historical_index)
-        print(f"- 已将历史数据保存到累积数据文件 (基于6天前数据计算)")
+        print(f"- 已将历史数据保存到累积数据文件 (基于当前数据近似计算)")
         
         # 生成历史指数图表
         try:
@@ -358,7 +360,7 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
     
     print(f"\n正在批量计算 {start_date} 至 {end_date} 的历史指数...")
     print("方法: 使用当前视频数据作为每个历史日期的近似值")
-    print("李大霄指数计算规则: 每个日期基于往回倒6天的数据计算")
+    print("历史指数计算规则: 所有历史日期使用相同的当前数据进行计算")
     
     try:
         calculator = HistoricalCalculator()
@@ -422,10 +424,10 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
         filename = f"historical_batch_{start_date}_{end_date}.json"
         import json
         
-        # 添加元数据说明6天偏移规则
+        # 添加元数据说明历史计算方法
         output_data = {
-            "calculation_rule": "李大霄指数计算规则：每个日期的指数基于该日期往回倒6天的数据计算",
-            "explanation": "显示日期为用户查看的日期，有效计算日期为实际用于指数计算的日期（显示日期-6天）",
+            "calculation_rule": "历史指数计算规则：使用当前视频数据作为所有历史日期的近似值",
+            "explanation": "所有历史日期返回相同的指数值，基于当前可获取的视频数据计算，避免了时间序列中的虚假增长趋势",
             "date_range": f"{start_date} 至 {end_date}",
             "results": results
         }
@@ -434,7 +436,7 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
             json.dump(output_data, f, indent=2, ensure_ascii=False)
         print(f"\n批量结果已保存到: {filename}")
         print(f"已将 {success_count} 条历史数据保存到累积数据文件")
-        print(f"注意: 每个指数值都是基于对应日期往回倒6天的数据计算的")
+        print(f"注意: 所有历史日期使用相同的当前视频数据进行近似计算")
         
     except Exception as e:
         print(f"批量计算失败: {e}")
@@ -527,10 +529,10 @@ async def calculate_default_historical_range(videos, args, current_date, current
         filename = f"historical_week_{current_date}.json"
         import json
         
-        # 添加元数据说明6天偏移规则
+        # 添加元数据说明历史计算方法
         output_data = {
-            "calculation_rule": "李大霄指数计算规则：每个日期的指数基于该日期往回倒6天的数据计算",
-            "explanation": "显示日期为用户查看的日期，有效计算日期为实际用于指数计算的日期（显示日期-6天）",
+            "calculation_rule": "历史指数计算规则：使用当前视频数据作为所有历史日期的近似值",
+            "explanation": "所有历史日期返回相同的指数值，基于当前可获取的视频数据计算，避免了时间序列中的虚假增长趋势",
             "results": results
         }
         
@@ -538,7 +540,7 @@ async def calculate_default_historical_range(videos, args, current_date, current
             json.dump(output_data, f, indent=2, ensure_ascii=False)
         print(f"\n历史数据已保存到: {filename}")
         print(f"已将 {success_count} 条历史数据保存到累积数据文件")
-        print(f"注意: 每个指数值都是基于对应日期往回倒6天的数据计算的")
+        print(f"注意: 所有历史日期使用相同的当前视频数据进行近似计算")
         
     except Exception as e:
         print(f"默认历史计算失败: {e}")
