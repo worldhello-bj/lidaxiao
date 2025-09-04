@@ -262,7 +262,7 @@ def plot_model_comparison(videos, target_date, current_date, models=None):
     }
     
     for model in models:
-        results = calculate_batch_historical(videos, date_list, current_date, model)
+        results = calculate_batch_historical(videos, date_list, current_date)
         dates = [r["date"] for r in results]
         indices = [r["index"] for r in results]
         
