@@ -11,7 +11,7 @@ This module contains all configuration constants and settings for the Li Daxiao 
 BILIBILI_UID = 2137589551
 
 # 时间设置
-DEFAULT_DAYS_RANGE = 7  # 默认查询过去7天的数据
+DEFAULT_DAYS_RANGE = 1  # 默认查询今日的数据
 
 # 指数计算相关常数
 VIEW_DIVISOR = 10000    # 播放量除数
