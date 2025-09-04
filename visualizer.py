@@ -28,17 +28,62 @@ def plot_history_trend(history_data, current_date):
     indices = [item["index"] for item in history_data]
     
     plt.figure(figsize=CHART_FIGSIZE_HISTORY)
-    plt.plot(dates, indices, marker='o', linestyle='-', color='blue')
-    plt.title(f"李大霄指数历史趋势 (截至 {current_date})")
-    plt.xlabel("日期")
-    plt.ylabel("指数值")
-    plt.xticks(rotation=45)
-    plt.grid(alpha=0.3)
+    plt.plot(dates, indices, marker='o', linestyle='-', color='#1f77b4',
+             linewidth=2.5, markersize=3, alpha=0.9)
+    
+    # 找出极值点并标注
+    if indices:
+        max_index = max(indices)
+        min_index = min(indices)
+        max_date = dates[indices.index(max_index)]
+        min_date = dates[indices.index(min_index)]
+        
+        # 标记最大值点
+        plt.scatter([max_date], [max_index], color='red', s=120, 
+                   zorder=6, marker='^', label=f'最大值: {max_index:.1f}')
+        plt.annotate(f'{max_index:.1f}', 
+                    xy=(max_date, max_index), xytext=(10, 15),
+                    textcoords='offset points', fontsize=10, color='red',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8),
+                    arrowprops=dict(arrowstyle='->', color='red', lw=1))
+        
+        # 标记最小值点
+        plt.scatter([min_date], [min_index], color='green', s=120, 
+                   zorder=6, marker='v', label=f'最小值: {min_index:.1f}')
+        plt.annotate(f'{min_index:.1f}', 
+                    xy=(min_date, min_index), xytext=(10, -25),
+                    textcoords='offset points', fontsize=10, color='green',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8),
+                    arrowprops=dict(arrowstyle='->', color='green', lw=1))
+    
+    plt.title(f"李大霄指数历史趋势 (截至 {current_date})", fontsize=14, pad=20)
+    plt.xlabel("日期", fontsize=12)
+    plt.ylabel("指数值", fontsize=12)
+    
+    # 改善X轴标签重叠问题
+    total_points = len(dates)
+    if total_points > 20:
+        step = max(1, total_points // 15)
+        selected_indices = list(range(0, total_points, step))
+        if selected_indices[-1] != total_points - 1:
+            selected_indices.append(total_points - 1)
+        
+        selected_dates = [dates[i] for i in selected_indices]
+        plt.xticks(selected_dates, rotation=45, ha='right')
+    else:
+        plt.xticks(rotation=45, ha='right')
+    
+    # 改善图例和网格
+    if indices and len(set(indices)) > 1:  # Only show legend if there are extreme values marked
+        plt.legend(loc='upper left', bbox_to_anchor=(0, 1), framealpha=0.9)
+    
+    plt.grid(True, alpha=0.4, linestyle='-', linewidth=0.5)
+    plt.grid(True, alpha=0.2, linestyle=':', linewidth=0.3, which='minor')
     plt.tight_layout()
     
     date_str = current_date.replace('-', '')
     filename = HISTORY_CHART_TEMPLATE.format(date_str=date_str)
-    plt.savefig(filename)
+    plt.savefig(filename, bbox_inches='tight', dpi=150)
     plt.close()
 
 
@@ -100,6 +145,7 @@ def plot_historical_estimates(historical_data, current_date, model_name="hybrid"
     :param model_name: 使用的模型名称
     """
     from config import CHART_FIGSIZE_HISTORY
+    import numpy as np
     
     if not historical_data:
         return
@@ -110,8 +156,32 @@ def plot_historical_estimates(historical_data, current_date, model_name="hybrid"
     plt.figure(figsize=CHART_FIGSIZE_HISTORY)
     
     # 绘制历史估算曲线
-    plt.plot(dates, indices, marker='o', linestyle='-', color='orange', 
-             linewidth=2, markersize=4, alpha=0.8, label=f'历史估算 ({model_name}模型)')
+    plt.plot(dates, indices, marker='o', linestyle='-', color='#1f77b4', 
+             linewidth=2.5, markersize=3, alpha=0.9, label=f'历史估算 ({model_name}模型)')
+    
+    # 找出极值点并标注
+    max_index = max(indices)
+    min_index = min(indices)
+    max_date = dates[indices.index(max_index)]
+    min_date = dates[indices.index(min_index)]
+    
+    # 标记最大值点
+    plt.scatter([max_date], [max_index], color='red', s=120, 
+               zorder=6, marker='^', label=f'最大值: {max_index:.1f}')
+    plt.annotate(f'{max_index:.1f}', 
+                xy=(max_date, max_index), xytext=(10, 15),
+                textcoords='offset points', fontsize=10, color='red',
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8),
+                arrowprops=dict(arrowstyle='->', color='red', lw=1))
+    
+    # 标记最小值点
+    plt.scatter([min_date], [min_index], color='green', s=120, 
+               zorder=6, marker='v', label=f'最小值: {min_index:.1f}')
+    plt.annotate(f'{min_index:.1f}', 
+                xy=(min_date, min_index), xytext=(10, -25),
+                textcoords='offset points', fontsize=10, color='green',
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8),
+                arrowprops=dict(arrowstyle='->', color='green', lw=1))
     
     # 标记当前日期
     current_index = None
@@ -121,20 +191,40 @@ def plot_historical_estimates(historical_data, current_date, model_name="hybrid"
             break
     
     if current_index:
-        plt.scatter([current_date], [current_index], color='red', s=100, 
+        plt.scatter([current_date], [current_index], color='orange', s=150, 
                    zorder=5, label='当前日期', marker='*')
     
-    plt.title(f"李大霄指数历史回推趋势 (截至 {current_date})")
-    plt.xlabel("日期")
-    plt.ylabel("指数值")
-    plt.legend()
-    plt.xticks(rotation=45)
-    plt.grid(alpha=0.3)
+    plt.title(f"李大霄指数历史回推趋势 (截至 {current_date})", fontsize=14, pad=20)
+    plt.xlabel("日期", fontsize=12)
+    plt.ylabel("指数值", fontsize=12)
+    
+    # 改善X轴标签重叠问题 - 智能选择显示的日期标签
+    total_points = len(dates)
+    if total_points > 20:
+        # 计算合适的步长，确保标签不会太密集
+        step = max(1, total_points // 15)  # 最多显示15个标签
+        selected_indices = list(range(0, total_points, step))
+        # 确保包含最后一个点
+        if selected_indices[-1] != total_points - 1:
+            selected_indices.append(total_points - 1)
+        
+        selected_dates = [dates[i] for i in selected_indices]
+        plt.xticks(selected_dates, rotation=45, ha='right')
+    else:
+        plt.xticks(rotation=45, ha='right')
+    
+    # 改善图例位置，避免重叠
+    plt.legend(loc='upper left', bbox_to_anchor=(0, 1), framealpha=0.9)
+    
+    # 改善网格样式
+    plt.grid(True, alpha=0.4, linestyle='-', linewidth=0.5)
+    plt.grid(True, alpha=0.2, linestyle=':', linewidth=0.3, which='minor')
+    
     plt.tight_layout()
     
     date_str = current_date.replace('-', '')
     filename = f"historical_estimates_{model_name}_{date_str}.png"
-    plt.savefig(filename, bbox_inches='tight')
+    plt.savefig(filename, bbox_inches='tight', dpi=150)
     plt.close()
     
     return filename
@@ -211,38 +301,71 @@ def plot_combined_trend(actual_history, estimated_history, current_date,
     
     plt.figure(figsize=CHART_FIGSIZE_HISTORY)
     
+    all_dates = []
+    all_indices = []
+    
     # 绘制实际历史数据
     if actual_history:
         actual_dates = [item["date"] for item in actual_history]
         actual_indices = [item["index"] for item in actual_history]
         plt.plot(actual_dates, actual_indices, marker='o', linestyle='-', 
-                color='blue', linewidth=2, markersize=4, 
+                color='#1f77b4', linewidth=2.5, markersize=3, 
                 label='实际历史数据')
+        all_dates.extend(actual_dates)
+        all_indices.extend(actual_indices)
     
     # 绘制估算历史数据
     if estimated_history:
         est_dates = [item["date"] for item in estimated_history]
         est_indices = [item["index"] for item in estimated_history]
         plt.plot(est_dates, est_indices, marker='s', linestyle='--', 
-                color='orange', linewidth=2, markersize=3, alpha=0.7,
+                color='orange', linewidth=2.5, markersize=3, alpha=0.8,
                 label=f'估算数据 ({model_name}模型)')
+        all_dates.extend(est_dates)
+        all_indices.extend(est_indices)
+    
+    # 标记全局极值
+    if all_indices:
+        max_index = max(all_indices)
+        min_index = min(all_indices)
+        max_date = all_dates[all_indices.index(max_index)]
+        min_date = all_dates[all_indices.index(min_index)]
+        
+        plt.scatter([max_date], [max_index], color='red', s=120, 
+                   zorder=6, marker='^', label=f'最大值: {max_index:.1f}')
+        plt.scatter([min_date], [min_index], color='green', s=120, 
+                   zorder=6, marker='v', label=f'最小值: {min_index:.1f}')
     
     # 添加分界线
     if split_date and actual_history and estimated_history:
         plt.axvline(x=split_date, color='red', linestyle=':', alpha=0.7, 
                    label='实际/估算分界')
     
-    plt.title(f"李大霄指数趋势对比 (截至 {current_date})")
-    plt.xlabel("日期")
-    plt.ylabel("指数值")
-    plt.legend()
-    plt.xticks(rotation=45)
-    plt.grid(alpha=0.3)
+    plt.title(f"李大霄指数趋势对比 (截至 {current_date})", fontsize=14, pad=20)
+    plt.xlabel("日期", fontsize=12)
+    plt.ylabel("指数值", fontsize=12)
+    
+    # 改善X轴标签重叠问题
+    total_points = len(set(all_dates))
+    if total_points > 20:
+        # 从合并的数据中选择显示的日期
+        unique_dates = sorted(set(all_dates))
+        step = max(1, len(unique_dates) // 15)
+        selected_dates = unique_dates[::step]
+        if unique_dates[-1] not in selected_dates:
+            selected_dates.append(unique_dates[-1])
+        plt.xticks(selected_dates, rotation=45, ha='right')
+    else:
+        plt.xticks(rotation=45, ha='right')
+    
+    plt.legend(loc='upper left', bbox_to_anchor=(0, 1), framealpha=0.9)
+    plt.grid(True, alpha=0.4, linestyle='-', linewidth=0.5)
+    plt.grid(True, alpha=0.2, linestyle=':', linewidth=0.3, which='minor')
     plt.tight_layout()
     
     date_str = current_date.replace('-', '')
     filename = f"combined_trend_{model_name}_{date_str}.png"
-    plt.savefig(filename, bbox_inches='tight')
+    plt.savefig(filename, bbox_inches='tight', dpi=150)
     plt.close()
     
     return filename
