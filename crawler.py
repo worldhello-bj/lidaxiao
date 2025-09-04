@@ -741,7 +741,7 @@ async def fetch_videos_playwright(uid, start_date, end_date, use_fallback=True, 
             async with PlaywrightBrowserSimulator(headless=headless) as browser:
                 page = 1
                 consecutive_failures = 0  # 连续失败页数
-                max_consecutive_failures = 2  # 允许的最大连续失败页数
+                max_consecutive_failures = 3  # 允许的最大连续失败页数
                 
                 # 根据是否启用扩展模式动态设置页数限制
                 if extended_pages:
