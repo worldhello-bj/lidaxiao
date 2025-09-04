@@ -216,18 +216,6 @@ async def main():
     parser.add_argument('--date-range',
                        help='历史日期范围，格式: start_date,end_date (YYYY-MM-DD,YYYY-MM-DD)')
     
-    # 数据管理功能参数
-    parser.add_argument('--consolidate', action='store_true',
-                       help='整合散落的历史数据文件到统一的history.json文件中')
-    parser.add_argument('--cleanup', action='store_true',
-                       help='在整合后删除散落的文件 (需要与--consolidate一起使用)')
-    parser.add_argument('--export-analysis', 
-                       help='导出长期分析数据，格式: start_date,end_date (YYYY-MM-DD,YYYY-MM-DD) 或 all')
-    parser.add_argument('--show-history-stats', action='store_true',
-                       help='显示统一历史文件的统计信息')
-    parser.add_argument('--help-unified-storage', action='store_true',
-                       help='显示统一历史数据存储系统的说明')
-    
     args = parser.parse_args()
     
     # 处理headless模式参数
@@ -240,105 +228,6 @@ async def main():
     elif args.no_headless:
         headless_mode = False
     # 如果都没有指定，将使用配置文件中的默认值 (headless_mode = None)
-    
-    # 数据管理模式
-    if args.consolidate:
-        from storage import consolidate_scattered_files
-        print("=" * 50)
-        print("历史数据文件整合模式")
-        print("=" * 50)
-        result = consolidate_scattered_files(cleanup_after_consolidation=args.cleanup)
-        print(f"整合完成: {result['consolidated_count']} 条记录，{result['processed_files']} 个文件")
-        return
-    
-    if args.export_analysis:
-        from storage import export_long_term_analysis_data
-        print("=" * 50)
-        print("长期分析数据导出模式")
-        print("=" * 50)
-        
-        if args.export_analysis.lower() == 'all':
-            start_date = None
-            end_date = None
-        else:
-            try:
-                start_date, end_date = args.export_analysis.split(',')
-            except ValueError:
-                print("错误: --export-analysis 格式应为 start_date,end_date 或 all")
-                return
-        
-        export_info = export_long_term_analysis_data(start_date, end_date)
-        print(f"导出完成: {export_info['total_entries']} 条记录")
-        return
-    
-    if args.help_unified_storage:
-        print("=" * 60)
-        print("李大霄指数统一历史数据存储系统说明")
-        print("=" * 60)
-        print()
-        print("## 概述")
-        print("统一历史数据存储系统将所有李大霄指数历史数据集中存储在单一的")
-        print("history.json 文件中，作为长期计算和分析的完整备份。")
-        print()
-        print("## 主要特性")
-        print("1. 统一存储 - 所有历史数据都保存在 history.json 中")
-        print("2. 完整元数据 - 每条记录包含详细的计算信息和来源")
-        print("3. 数据类型追踪 - 区分当前数据、历史数据和估算数据")
-        print("4. 自动整合 - 可以整合散落的历史文件")
-        print("5. 长期分析导出 - 支持导出指定时间范围的分析数据")
-        print()
-        print("## 文件结构")
-        print("history.json 包含:")
-        print("- version: 文件版本")
-        print("- description: 文件说明")
-        print("- statistics: 统计信息（总记录数、日期范围、数据类型分布）")
-        print("- data: 历史数据数组，每条记录包含：")
-        print("  * date: 日期")
-        print("  * index: 指数值")
-        print("  * data_type: 数据类型（current/historical/estimated）")
-        print("  * source: 数据来源")
-        print("  * created_at/updated_at: 创建和更新时间")
-        print("  * metadata: 额外元数据")
-        print()
-        print("## 使用命令")
-        print("查看统计信息：")
-        print("  python3 lidaxiao.py --show-history-stats")
-        print()
-        print("整合散落的文件：")
-        print("  python3 lidaxiao.py --consolidate")
-        print("  python3 lidaxiao.py --consolidate --cleanup  # 整合后删除原文件")
-        print()
-        print("导出长期分析数据：")
-        print("  python3 lidaxiao.py --export-analysis all")
-        print("  python3 lidaxiao.py --export-analysis 2024-01-01,2024-12-31")
-        print()
-        print("## 优势")
-        print("- 提供完整的历史数据备份，避免数据散落")
-        print("- 支持长期趋势分析和数据挖掘")
-        print("- 维护数据的完整性和一致性")
-        print("- 便于数据迁移和备份")
-        return
-    
-    if args.show_history_stats:
-        from storage import load_master_history_data
-        print("=" * 50)
-        print("统一历史文件统计信息")
-        print("=" * 50)
-        
-        history_structure = load_master_history_data()
-        stats = history_structure.get("statistics", {})
-        
-        print(f"文件版本: {history_structure.get('version', 'unknown')}")
-        print(f"总记录数: {stats.get('total_entries', 0)}")
-        print(f"日期范围: {stats.get('date_range', {}).get('start', 'N/A')} 至 {stats.get('date_range', {}).get('end', 'N/A')}")
-        print(f"最后更新: {stats.get('last_updated', 'N/A')}")
-        print("\n数据类型分布:")
-        for data_type, count in stats.get('data_types', {}).items():
-            print(f"  {data_type}: {count}")
-        
-        print(f"\n统一历史文件路径: history.json")
-        print("说明: 这是李大霄指数的完整历史数据备份，用于长期计算和分析")
-        return
     
     # 历史计算模式
     if args.historical:
@@ -428,20 +317,10 @@ async def calculate_single_historical_date(videos, args, current_date, current_i
         print(f"- 历史指数近似值: {historical_index:.2f}")
         print(f"- 说明: 使用当前视频数据作为 {effective_date.strftime('%Y-%m-%d')} 的近似值")
         
-        # 将历史数据保存到统一历史文件
+        # 将历史数据保存到累积数据中
         from storage import update_history_data
-        update_history_data(
-            target_date, 
-            historical_index, 
-            data_type="historical", 
-            source="single_date_calculation",
-            metadata={
-                "effective_calculation_date": effective_date.strftime('%Y-%m-%d'),
-                "days_back_from_target": 6,
-                "approximation_method": "current_data_as_historical"
-            }
-        )
-        print(f"- 已将历史数据保存到统一历史数据文件 (基于6天前数据计算)")
+        update_history_data(target_date, historical_index)
+        print(f"- 已将历史数据保存到累积数据文件 (基于6天前数据计算)")
         
         # 生成历史指数图表
         try:
@@ -499,24 +378,12 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
             status = "✓ 成功" if "error" not in result else "✗ 失败"
             print(f"{display_date:<12} {effective_date:<15} {result['index']:<15.2f} {status}")
         
-        # 保存批量结果到统一历史数据文件
+        # 保存批量结果到累积历史数据
         from storage import update_history_data
         success_count = 0
         for result in results:
             if "error" not in result:
-                effective_date = calculate_effective_target_date(result['date']).strftime("%Y-%m-%d")
-                update_history_data(
-                    result['date'], 
-                    result['index'],
-                    data_type="historical", 
-                    source="batch_date_calculation",
-                    metadata={
-                        "effective_calculation_date": effective_date,
-                        "days_back_from_target": 6,
-                        "approximation_method": "current_data_as_historical",
-                        "batch_range": f"{start_date}_to_{end_date}"
-                    }
-                )
+                update_history_data(result['date'], result['index'])
                 success_count += 1
         
         # 生成批量历史趋势图表
@@ -551,27 +418,22 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
             import traceback
             traceback.print_exc()
         
-        # 同时创建简化的备份文件（可选）
-        if len(results) > 1:  # 只有多个数据点时才创建备份文件
-            filename = f"historical_batch_{start_date}_{end_date}.json"
-            import json
-            
-            # 添加元数据说明6天偏移规则
-            output_data = {
-                "note": "此文件为批量历史计算的备份，主数据已存储在统一的history.json文件中",
-                "calculation_rule": "李大霄指数计算规则：每个日期的指数基于该日期往回倒6天的数据计算",
-                "explanation": "显示日期为用户查看的日期，有效计算日期为实际用于指数计算的日期（显示日期-6天）",
-                "date_range": f"{start_date} 至 {end_date}",
-                "results": results
-            }
-            
-            with open(filename, "w", encoding='utf-8') as f:
-                json.dump(output_data, f, indent=2, ensure_ascii=False)
-            print(f"\n批量结果备份已保存到: {filename} (主数据在统一history.json中)")
-        else:
-            print(f"\n单个数据点，已直接保存到统一历史文件中")
+        # 同时保存批量结果到单独文件
+        filename = f"historical_batch_{start_date}_{end_date}.json"
+        import json
         
-        print(f"已将 {success_count} 条历史数据保存到统一历史数据文件 (history.json)")
+        # 添加元数据说明6天偏移规则
+        output_data = {
+            "calculation_rule": "李大霄指数计算规则：每个日期的指数基于该日期往回倒6天的数据计算",
+            "explanation": "显示日期为用户查看的日期，有效计算日期为实际用于指数计算的日期（显示日期-6天）",
+            "date_range": f"{start_date} 至 {end_date}",
+            "results": results
+        }
+        
+        with open(filename, "w", encoding='utf-8') as f:
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
+        print(f"\n批量结果已保存到: {filename}")
+        print(f"已将 {success_count} 条历史数据保存到累积数据文件")
         print(f"注意: 每个指数值都是基于对应日期往回倒6天的数据计算的")
         
     except Exception as e:
@@ -620,25 +482,13 @@ async def calculate_default_historical_range(videos, args, current_date, current
             
             print(f"{display_date:<12} {effective_date:<15} {result['index']:<15.2f} {description}")
         
-        # 保存批量结果到统一历史数据文件
+        # 保存批量结果到累积历史数据
         from storage import update_history_data
         success_count = 0
         for result in results:
             if "error" not in result:
-                effective_date = calculate_effective_target_date(result['date']).strftime("%Y-%m-%d")
                 # 使用显示日期保存，但备注这是基于6天前数据计算的
-                update_history_data(
-                    result['date'], 
-                    result['index'],
-                    data_type="historical", 
-                    source="weekly_default_calculation",
-                    metadata={
-                        "effective_calculation_date": effective_date,
-                        "days_back_from_target": 6,
-                        "approximation_method": "current_data_as_historical",
-                        "calculation_type": "weekly_default_range"
-                    }
-                )
+                update_history_data(result['date'], result['index'])
                 success_count += 1
         
         # 生成默认历史范围图表
@@ -673,26 +523,21 @@ async def calculate_default_historical_range(videos, args, current_date, current
             import traceback
             traceback.print_exc()
         
-        # 简化的每周结果记录（可选）
-        if success_count > 1:  # 只有多个数据点时才创建记录文件
-            filename = f"historical_week_{current_date}.json"
-            import json
-            
-            # 添加元数据说明6天偏移规则
-            output_data = {
-                "note": "此文件为每周历史计算的备份，主数据已存储在统一的history.json文件中",
-                "calculation_rule": "李大霄指数计算规则：每个日期的指数基于该日期往回倒6天的数据计算",
-                "explanation": "显示日期为用户查看的日期，有效计算日期为实际用于指数计算的日期（显示日期-6天）",
-                "results": results
-            }
-            
-            with open(filename, "w", encoding='utf-8') as f:
-                json.dump(output_data, f, indent=2, ensure_ascii=False)
-            print(f"\n每周历史数据备份已保存到: {filename} (主数据在统一history.json中)")
-        else:
-            print(f"\n单个数据点，已直接保存到统一历史文件中")
+        # 保存默认结果到单独文件
+        filename = f"historical_week_{current_date}.json"
+        import json
         
-        print(f"已将 {success_count} 条历史数据保存到统一历史数据文件 (history.json)")
+        # 添加元数据说明6天偏移规则
+        output_data = {
+            "calculation_rule": "李大霄指数计算规则：每个日期的指数基于该日期往回倒6天的数据计算",
+            "explanation": "显示日期为用户查看的日期，有效计算日期为实际用于指数计算的日期（显示日期-6天）",
+            "results": results
+        }
+        
+        with open(filename, "w", encoding='utf-8') as f:
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
+        print(f"\n历史数据已保存到: {filename}")
+        print(f"已将 {success_count} 条历史数据保存到累积数据文件")
         print(f"注意: 每个指数值都是基于对应日期往回倒6天的数据计算的")
         
     except Exception as e:
@@ -728,18 +573,7 @@ async def run_current_mode(args, headless=None):
         
         # 保存数据
         print("正在保存数据...")
-        from storage import save_daily_data, update_history_data
-        save_daily_data(d, index_value)
-        update_history_data(
-            d, 
-            index_value, 
-            data_type="current", 
-            source="daily_calculation",
-            metadata={
-                "video_count": len(videos),
-                "calculation_mode": args.mode
-            }
-        )
+        save_all_data(d, index_value)
         
         # 生成可视化图表
         print("正在生成图表...")
