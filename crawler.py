@@ -192,6 +192,82 @@ class PlaywrightBrowserSimulator:
             logger.error(f"Playwright获取页面内容失败: {e}")
             raise
 
+    async def check_pagination_info(self):
+        """检查分页信息，返回当前页和总页数"""
+        try:
+            # 等待分页区域加载
+            await self.page.wait_for_selector('.vui_pagenation, .page-wrap, .bili-pager', timeout=5000)
+            
+            # 尝试获取当前页信息
+            current_page = 1
+            total_pages = 1
+            has_next = False
+            
+            # 查找当前页指示器
+            current_page_selectors = [
+                '.vui_button.vui_pagenation--btn-num.active',
+                '.page-item.active',
+                '.current-page',
+                '.bili-pager-btn.current'
+            ]
+            
+            for selector in current_page_selectors:
+                try:
+                    element = await self.page.locator(selector).first.text_content()
+                    if element and element.isdigit():
+                        current_page = int(element)
+                        break
+                except:
+                    continue
+            
+            # 查找下一页按钮是否可用
+            next_button_selectors = [
+                '.vui_button.vui_pagenation--btn-side:has-text("下一页"):not([disabled])',
+                '.page-item.next:not(.disabled)',
+                'button:has-text("下一页"):not([disabled])',
+                '.bili-pager-next:not([disabled])'
+            ]
+            
+            for selector in next_button_selectors:
+                try:
+                    button = self.page.locator(selector).first
+                    if await button.count() > 0 and await button.is_enabled():
+                        has_next = True
+                        break
+                except:
+                    continue
+            
+            # 尝试获取总页数
+            total_page_selectors = [
+                '.vui_pagenation .vui_button.vui_pagenation--btn-num:last-of-type',
+                '.page-wrap .page-item:nth-last-child(2)',
+                '.bili-pager-btn:not(.next):not(.prev):last-of-type'
+            ]
+            
+            for selector in total_page_selectors:
+                try:
+                    element = await self.page.locator(selector).text_content()
+                    if element and element.isdigit():
+                        total_pages = max(total_pages, int(element))
+                        break
+                except:
+                    continue
+            
+            logger.debug(f"分页信息: 当前页={current_page}, 总页数={total_pages}, 有下一页={has_next}")
+            return {
+                'current_page': current_page,
+                'total_pages': total_pages,
+                'has_next': has_next
+            }
+            
+        except Exception as e:
+            logger.debug(f"获取分页信息失败: {e}")
+            return {
+                'current_page': 1,
+                'total_pages': 1,
+                'has_next': False
+            }
+
     async def navigate_to_next_page(self, target_page_num):
         """通过点击分页按钮导航到目标页面"""
         try:
@@ -269,6 +345,27 @@ class PlaywrightBrowserSimulator:
             logger.error(f"导航到第{target_page_num}页失败: {e}")
             return False
             
+    def check_videos_too_old(self, page_videos, start_date):
+        """检查页面中的视频是否都太旧，超出了日期范围"""
+        if not page_videos:
+            return False
+            
+        # 转换start_date为时间戳
+        start_timestamp = datetime.datetime.strptime(start_date, "%Y-%m-%d").timestamp()
+        
+        # 检查页面中是否有视频在日期范围内
+        valid_videos = 0
+        for video in page_videos:
+            if video.get('created', 0) >= start_timestamp:
+                valid_videos += 1
+        
+        # 如果没有视频在日期范围内，说明视频太旧了
+        too_old = valid_videos == 0
+        if too_old:
+            logger.info(f"页面中所有 {len(page_videos)} 个视频都早于起始日期 {start_date}，停止翻页")
+        
+        return too_old
+
     def parse_videos_from_html(self, html_content):
         """解析HTML内容获取视频数据"""
         if not BS4_AVAILABLE:
@@ -662,13 +759,16 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
                 page = 1
                 consecutive_failures = 0  # 连续失败页数
                 max_consecutive_failures = 2  # 允许的最大连续失败页数
+                consecutive_empty_pages = 0  # 连续空页数（没有符合日期范围的视频）
+                max_consecutive_empty = 3  # 允许的最大连续空页数
                 
-                # 根据是否启用扩展模式动态设置页数限制
+                # 根据是否启用扩展模式动态设置页数限制（作为安全上限）
                 if extended_pages:
-                    max_pages = 25  # 扩展模式：最多获取25页数据
-                    logger.info("启用扩展爬取模式，将获取更多页面的视频数据")
+                    max_pages = 50  # 扩展模式：提高上限，但依赖智能停止
+                    logger.info("启用扩展爬取模式，使用智能分页检测获取更多视频数据")
                 else:
-                    max_pages = 10  # 标准模式：最多获取10页数据
+                    max_pages = 20  # 标准模式：提高上限，但依赖智能停止
+                    logger.info("使用智能分页检测获取视频数据")
                 
                 while page <= max_pages:
                     try:
@@ -682,6 +782,9 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
                             logger.info(f"第 {page} 页无法获取内容（可能没有更多页面），停止翻页")
                             break
                         
+                        # 检查分页信息
+                        pagination_info = await browser.check_pagination_info()
+                        
                         # 解析视频数据
                         page_videos = browser.parse_videos_from_html(html_content)
                         
@@ -690,6 +793,11 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
                             break
                         
                         logger.info(f"第 {page} 页成功解析到 {len(page_videos)} 个视频")
+                        
+                        # 检查视频是否太旧
+                        if browser.check_videos_too_old(page_videos, start_date):
+                            logger.info("检测到视频太旧，停止翻页")
+                            break
                         
                         # 筛选指定日期范围内的视频
                         valid_videos_count = 0
@@ -703,13 +811,32 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
                         
                         logger.info(f"第 {page} 页有 {valid_videos_count} 个视频符合日期范围 {start_date} 至 {end_date}")
                         
+                        # 智能停止条件
+                        if valid_videos_count == 0:
+                            consecutive_empty_pages += 1
+                            logger.info(f"连续 {consecutive_empty_pages} 页没有符合条件的视频")
+                            if consecutive_empty_pages >= max_consecutive_empty:
+                                logger.info("连续多页没有符合条件的视频，停止翻页")
+                                break
+                        else:
+                            consecutive_empty_pages = 0  # 重置连续空页计数
+                        
+                        # 检查是否还有下一页
+                        if not pagination_info['has_next']:
+                            logger.info("检测到没有下一页，停止翻页")
+                            break
+                        
+                        # 如果当前页已经是总页数，也停止
+                        if pagination_info['total_pages'] > 1 and page >= pagination_info['total_pages']:
+                            logger.info(f"已到达最后一页（{pagination_info['total_pages']}），停止翻页")
+                            break
+                        
                         # 重置连续失败计数
                         consecutive_failures = 0
                         page += 1
                         
                         # 添加页面间隔，避免被检测为爬虫
-                        if page <= max_pages:
-                            await asyncio.sleep(random.uniform(3, 6))  # 页面间延迟
+                        await asyncio.sleep(random.uniform(3, 6))  # 页面间延迟
                         
                     except Exception as e:
                         consecutive_failures += 1
