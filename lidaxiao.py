@@ -322,6 +322,31 @@ async def calculate_single_historical_date(videos, args, current_date, current_i
         update_history_data(target_date, historical_index)
         print(f"- 已将历史数据保存到累积数据文件 (基于6天前数据计算)")
         
+        # 生成历史指数图表
+        try:
+            from storage import load_history_data
+            from visualizer import generate_historical_charts
+            
+            history_data = load_history_data()
+            if history_data:
+                print("- 正在生成历史趋势图表...")
+                generated_files = generate_historical_charts(
+                    videos, current_date, 
+                    [{"date": target_date, "index": historical_index, "estimated": True}],
+                    target_date
+                )
+                if generated_files:
+                    print("- 生成的图表文件:")
+                    for file in generated_files:
+                        print(f"  * {file}")
+                else:
+                    print("- 图表生成完成")
+            else:
+                print("- 跳过图表生成 (无历史数据)")
+                
+        except Exception as chart_error:
+            print(f"- 图表生成失败: {chart_error}")
+        
     except Exception as e:
         print(f"计算失败: {e}")
 
@@ -360,6 +385,38 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
             if "error" not in result:
                 update_history_data(result['date'], result['index'])
                 success_count += 1
+        
+        # 生成批量历史趋势图表
+        try:
+            print("\n正在生成历史趋势图表...")
+            from visualizer import plot_historical_estimates, generate_historical_charts
+            
+            # 准备用于图表生成的数据格式
+            chart_data = [{"date": r["date"], "index": r["index"], "estimated": True} 
+                         for r in results if "error" not in r]
+            
+            if chart_data:
+                # 生成历史估算趋势图
+                filename = plot_historical_estimates(chart_data, current_date, "batch_historical")
+                if filename:
+                    print(f"✓ 批量历史趋势图已生成: {filename}")
+                
+                # 尝试生成其他历史图表
+                generated_files = generate_historical_charts(
+                    videos, current_date, chart_data, 
+                    target_date=start_date
+                )
+                if generated_files:
+                    print("✓ 其他历史图表文件:")
+                    for file in generated_files:
+                        print(f"  * {file}")
+            else:
+                print("✗ 无有效数据用于图表生成")
+                
+        except Exception as chart_error:
+            print(f"✗ 图表生成失败: {chart_error}")
+            import traceback
+            traceback.print_exc()
         
         # 同时保存批量结果到单独文件
         filename = f"historical_batch_{start_date}_{end_date}.json"
@@ -433,6 +490,38 @@ async def calculate_default_historical_range(videos, args, current_date, current
                 # 使用显示日期保存，但备注这是基于6天前数据计算的
                 update_history_data(result['date'], result['index'])
                 success_count += 1
+        
+        # 生成默认历史范围图表
+        try:
+            print("\n正在生成过去一周历史趋势图表...")
+            from visualizer import plot_historical_estimates, generate_historical_charts
+            
+            # 准备用于图表生成的数据格式
+            chart_data = [{"date": r["date"], "index": r["index"], "estimated": True} 
+                         for r in results if "error" not in r]
+            
+            if chart_data:
+                # 生成历史估算趋势图
+                filename = plot_historical_estimates(chart_data, current_date, "weekly_historical")
+                if filename:
+                    print(f"✓ 过去一周历史趋势图已生成: {filename}")
+                
+                # 尝试生成其他历史图表
+                generated_files = generate_historical_charts(
+                    videos, current_date, chart_data, 
+                    target_date=raw_start_date.strftime("%Y-%m-%d")
+                )
+                if generated_files:
+                    print("✓ 其他历史图表文件:")
+                    for file in generated_files:
+                        print(f"  * {file}")
+            else:
+                print("✗ 无有效数据用于图表生成")
+                
+        except Exception as chart_error:
+            print(f"✗ 图表生成失败: {chart_error}")
+            import traceback
+            traceback.print_exc()
         
         # 保存默认结果到单独文件
         filename = f"historical_week_{current_date}.json"
