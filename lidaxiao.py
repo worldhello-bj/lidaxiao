@@ -235,6 +235,32 @@ async def main():
     await run_current_mode(args, headless=headless_mode)
 
 
+def validate_historical_dates(args, current_date):
+    """
+    验证历史日期参数，确保不是未来日期
+    
+    :param args: 命令行参数
+    :param current_date: 当前日期字符串
+    :raises ValueError: 如果目标日期是未来日期
+    """
+    current_dt = datetime.datetime.strptime(current_date, "%Y-%m-%d").date()
+    
+    if args.target_date:
+        target_dt = datetime.datetime.strptime(args.target_date, "%Y-%m-%d").date()
+        if target_dt > current_dt:
+            raise ValueError(f"目标日期 {args.target_date} 不能晚于当前日期 {current_date}")
+    
+    if args.date_range:
+        start_date_str, end_date_str = args.date_range.split(',')
+        start_dt = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        end_dt = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        
+        if start_dt > current_dt:
+            raise ValueError(f"开始日期 {start_date_str} 不能晚于当前日期 {current_date}")
+        if end_dt > current_dt:
+            raise ValueError(f"结束日期 {end_date_str} 不能晚于当前日期 {current_date}")
+
+
 async def run_historical_mode(args, headless=None):
     """历史指数计算模式 - 使用当前视频数据作为历史数据近似"""
     print("=" * 50)
@@ -243,6 +269,17 @@ async def run_historical_mode(args, headless=None):
     print("=" * 50)
     
     current_date = datetime.date.today().strftime("%Y-%m-%d")
+    
+    # 验证历史日期参数，防止未来日期
+    try:
+        validate_historical_dates(args, current_date)
+    except ValueError as e:
+        print(f"❌ 日期验证失败: {e}")
+        print("\n💡 提示:")
+        print("- 历史指数计算只能计算过去的日期")
+        print("- 请检查目标日期是否正确，确保不是未来日期")
+        print("- 日期格式应为 YYYY-MM-DD，例如: 2024-09-05")
+        return
     
     # 根据目标历史日期动态确定视频获取范围，确保有足够的历史数据
     video_fetch_range = determine_video_fetch_range(args, current_date)
