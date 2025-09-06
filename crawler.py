@@ -618,7 +618,7 @@ class PlaywrightBrowserSimulator:
                     view_count = self._parse_stats_number(view_text)
                     comment_count = self._parse_stats_number(comment_text)
                 
-                # 优化：简化时间戳提取
+                # 超级优化：简化时间戳提取，解决5分钟性能问题
                 created_timestamp = self._extract_publish_timestamp_fast(card)
                 
                 if aid > 0:
@@ -692,34 +692,96 @@ class PlaywrightBrowserSimulator:
         return 0
 
     def _extract_publish_timestamp_fast(self, card):
-        """快速提取发布时间戳 - 性能优化版本，减少日志开销"""
+        """超级优化的时间戳提取 - 专门解决5分钟解析42个视频的性能问题"""
         try:
-            # 优化：只检查最常见的时间选择器
-            time_selectors = [
-                '.bili-video-card__subtitle',
-                'span[title]',
-                '.time',
-            ]
+            # 超级优化：直接查找最常见的时间元素，避免复杂的CSS选择器
+            # 优先查找带title属性的span（B站最常用的时间格式）
+            spans_with_title = card.find_all('span', title=True)
+            for span in spans_with_title:
+                title_text = span.get('title', '')
+                if title_text and ('2024' in title_text or '2023' in title_text or '小时前' in title_text or '分钟前' in title_text):
+                    timestamp = self._parse_time_string_ultra_fast(title_text)
+                    if timestamp > 0:
+                        return timestamp
             
-            for selector in time_selectors:
-                time_elements = card.select(selector)
-                for elem in time_elements:
-                    # 检查元素的时间属性
-                    for attr in ['title', 'data-time', 'datetime']:
-                        time_str = elem.get(attr, '')
-                        if time_str:
-                            timestamp = self._parse_time_string(time_str)
-                            if timestamp > 0:
-                                return timestamp
+            # 快速查找包含时间文本的span
+            spans = card.find_all('span')
+            for span in spans:
+                text = span.get_text(strip=True)
+                if text and ('小时前' in text or '分钟前' in text or '天前' in text or '个月前' in text):
+                    timestamp = self._parse_time_string_ultra_fast(text)
+                    if timestamp > 0:
+                        return timestamp
                     
-                    # 检查元素文本内容
-                    text = elem.get_text(strip=True)
-                    if text:
-                        timestamp = self._parse_time_string(text)
-                        if timestamp > 0:
-                            return timestamp
         except Exception:
-            # 性能优化：移除不必要的调试日志，减少IO开销
+            pass
+        
+        return int(time.time())  # 默认当前时间
+
+    def _parse_time_string_ultra_fast(self, time_str):
+        """超级优化的时间字符串解析 - 专门解决5分钟性能问题"""
+        try:
+            time_str = time_str.strip()
+            current_time = datetime.datetime.now()
+            
+            # 最常见的相对时间格式 - 使用快速字符串操作而不是regex
+            if '小时前' in time_str:
+                # 快速提取数字，避免regex
+                for i, char in enumerate(time_str):
+                    if char.isdigit():
+                        num_str = ''
+                        for j in range(i, len(time_str)):
+                            if time_str[j].isdigit():
+                                num_str += time_str[j]
+                            else:
+                                break
+                        if num_str:
+                            hours = int(num_str)
+                            target_time = current_time - datetime.timedelta(hours=hours)
+                            return int(target_time.timestamp())
+                        break
+            elif '分钟前' in time_str:
+                for i, char in enumerate(time_str):
+                    if char.isdigit():
+                        num_str = ''
+                        for j in range(i, len(time_str)):
+                            if time_str[j].isdigit():
+                                num_str += time_str[j]
+                            else:
+                                break
+                        if num_str:
+                            minutes = int(num_str)
+                            target_time = current_time - datetime.timedelta(minutes=minutes)
+                            return int(target_time.timestamp())
+                        break
+            elif '天前' in time_str:
+                for i, char in enumerate(time_str):
+                    if char.isdigit():
+                        num_str = ''
+                        for j in range(i, len(time_str)):
+                            if time_str[j].isdigit():
+                                num_str += time_str[j]
+                            else:
+                                break
+                        if num_str:
+                            days = int(num_str)
+                            target_time = current_time - datetime.timedelta(days=days)
+                            return int(target_time.timestamp())
+                        break
+                            
+            # 快速处理常见的绝对时间格式，避免多次datetime.strptime调用
+            if '2024' in time_str or '2023' in time_str:
+                # 快速处理 "2024-01-15 12:30:45" 格式
+                if len(time_str) >= 10 and time_str[4] == '-' and time_str[7] == '-':
+                    try:
+                        date_part = time_str[:10]  # YYYY-MM-DD
+                        parsed_time = datetime.datetime.strptime(date_part, '%Y-%m-%d')
+                        return int(parsed_time.timestamp())
+                    except ValueError:
+                        pass
+                        
+        except Exception:
+            # 移除所有debug日志以提高性能
             pass
         
         return 0
@@ -899,8 +961,9 @@ class PlaywrightBrowserSimulator:
                 except ValueError:
                     pass
                     
-        except Exception as e:
-            logger.debug(f"解析时间字符串失败 '{time_str}': {e}")
+        except Exception:
+            # 移除debug日志以提高性能
+            pass
         
         return 0
 
