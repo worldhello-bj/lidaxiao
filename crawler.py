@@ -548,36 +548,43 @@ class PlaywrightBrowserSimulator:
         return too_old
 
     def parse_videos_from_html(self, html_content):
-        """解析HTML内容获取视频数据"""
-        logger.debug("🎬 开始解析HTML内容获取视频数据")
+        """解析HTML内容获取视频数据 - 性能优化版本"""
+        logger.info("🎬 开始解析HTML内容获取视频数据")
         if not BS4_AVAILABLE:
             logger.error("BeautifulSoup4 not available, cannot parse HTML content")
             return []
             
         soup = BeautifulSoup(html_content, 'html.parser')
-        logger.debug(f"📄 HTML内容长度: {len(html_content)} 字符")
+        logger.info(f"📄 HTML内容长度: {len(html_content)} 字符")
         
+        # 性能优化：直接调用优化后的解析函数
         videos = self._parse_videos_from_html_elements(soup)
-        log_video_parsing_details(videos, "HTML解析完成")
+        
+        # 只在调试模式启用时记录详细的视频解析信息
+        if DEBUG_CONFIG.get("enabled", False) and DEBUG_CONFIG.get("log_video_parsing", False):
+            log_video_parsing_details(videos, "HTML解析完成")
+            
         return videos
     
     def _parse_videos_from_html_elements(self, soup):
-        """从HTML元素解析视频数据 - 优化版本，提高解析速度"""
+        """从HTML元素解析视频数据 - 性能优化版本，减少日志开销"""
         videos = []
-        logger.debug("🔍 开始从HTML元素解析视频数据")
+        logger.info("🔍 开始从HTML元素解析视频数据")
         
         # 优化：使用更精确的选择器，减少查找时间
         video_cards = soup.select('.small-item, .bili-video-card')
-        logger.debug(f"📄 找到 {len(video_cards)} 个视频卡片元素")
+        logger.info(f"📄 找到 {len(video_cards)} 个视频卡片元素")
+        
+        # 性能优化：批量处理，减少单个视频的日志开销
+        parsed_count = 0
+        failed_count = 0
         
         for i, card in enumerate(video_cards):
             try:
-                logger.debug(f"🎬 解析第 {i+1} 个视频卡片")
-                
                 # 优化：直接查找a标签，减少条件判断
                 link = card.find('a', href=True)
                 if not link:
-                    logger.debug(f"❌ 第 {i+1} 个卡片未找到链接")
+                    failed_count += 1
                     continue
                     
                 href = link['href']
@@ -588,17 +595,14 @@ class PlaywrightBrowserSimulator:
                     aid_match = re.search(r'/video/av(\d+)', href)
                     if aid_match:
                         aid = int(aid_match.group(1))
-                        logger.debug(f"✅ 提取AV号: {aid}")
                 elif '/video/BV' in href:
                     # 优化：简化BV号处理
                     bv_match = re.search(r'/video/(BV\w+)', href)
                     if bv_match:
                         aid = abs(hash(bv_match.group(1))) % (10**9)
-                        logger.debug(f"✅ 提取BV号并转换: {bv_match.group(1)} -> {aid}")
                 
                 # 优化：简化标题提取
                 title = link.get('title', '') or link.get_text(strip=True) or ''
-                logger.debug(f"📝 视频标题: {title[:50]}{'...' if len(title) > 50 else ''}")
                 
                 # 优化：提取播放量和评论数 - 使用更精确的选择器
                 view_count = 0
@@ -606,7 +610,6 @@ class PlaywrightBrowserSimulator:
                 
                 # 优化：使用select查找统计数据，更快
                 stats_spans = card.select('.bili-video-card__stats span, .stats span, .count span')
-                logger.debug(f"📊 找到 {len(stats_spans)} 个统计元素")
                 
                 if len(stats_spans) >= 2:
                     view_text = stats_spans[0].get_text(strip=True)
@@ -614,12 +617,9 @@ class PlaywrightBrowserSimulator:
                     
                     view_count = self._parse_stats_number(view_text)
                     comment_count = self._parse_stats_number(comment_text)
-                    
-                    logger.debug(f"📊 统计数据 - 播放: {view_text} -> {view_count}, 评论: {comment_text} -> {comment_count}")
                 
                 # 优化：简化时间戳提取
                 created_timestamp = self._extract_publish_timestamp_fast(card)
-                logger.debug(f"⏰ 时间戳: {created_timestamp}")
                 
                 if aid > 0:
                     video_data = {
@@ -630,16 +630,29 @@ class PlaywrightBrowserSimulator:
                         'created': created_timestamp
                     }
                     videos.append(video_data)
-                    logger.debug(f"✅ 成功解析视频: AID={aid}, 播放={view_count}, 评论={comment_count}")
+                    parsed_count += 1
+                    
+                    # 只在调试模式下输出详细信息，并且只输出前3个视频作为示例
+                    if DEBUG_CONFIG.get("enabled", False) and DEBUG_CONFIG.get("log_video_parsing", False) and parsed_count <= 3:
+                        logger.debug(f"🎬 视频 {parsed_count}: {title[:30]}{'...' if len(title) > 30 else ''}, AID={aid}, 播放={view_count}, 评论={comment_count}")
                 else:
-                    logger.debug(f"❌ 第 {i+1} 个卡片AID为0，跳过")
+                    failed_count += 1
                     
             except Exception as e:
-                log_exception_context(f"解析第{i+1}个视频卡片", e, {"card_index": i})
-                logger.debug(f"解析视频卡片失败: {e}")
+                failed_count += 1
+                # 只在调试模式下输出解析错误的详细信息
+                if DEBUG_CONFIG.get("enabled", False):
+                    log_exception_context(f"解析第{i+1}个视频卡片", e, {"card_index": i})
                 continue
         
-        logger.info(f"从HTML元素解析到 {len(videos)} 个视频")
+        logger.info(f"从HTML元素解析到 {len(videos)} 个视频，成功 {parsed_count} 个，失败 {failed_count} 个")
+        
+        # 在调试模式下输出更多详细信息
+        if DEBUG_CONFIG.get("enabled", False) and DEBUG_CONFIG.get("log_video_parsing", False):
+            logger.debug(f"📊 解析统计 - 总卡片: {len(video_cards)}, 成功解析: {parsed_count}, 解析失败: {failed_count}")
+            if parsed_count > 3:
+                logger.debug(f"... 还有 {parsed_count - 3} 个视频已成功解析（详细信息已省略以提高性能）")
+        
         return videos
     
     def _parse_stats_number(self, text):
@@ -679,7 +692,7 @@ class PlaywrightBrowserSimulator:
         return 0
 
     def _extract_publish_timestamp_fast(self, card):
-        """快速提取发布时间戳 - 优化版本"""
+        """快速提取发布时间戳 - 性能优化版本，减少日志开销"""
         try:
             # 优化：只检查最常见的时间选择器
             time_selectors = [
@@ -705,8 +718,9 @@ class PlaywrightBrowserSimulator:
                         timestamp = self._parse_time_string(text)
                         if timestamp > 0:
                             return timestamp
-        except Exception as e:
-            logger.debug(f"快速时间戳提取失败: {e}")
+        except Exception:
+            # 性能优化：移除不必要的调试日志，减少IO开销
+            pass
         
         return 0
 
