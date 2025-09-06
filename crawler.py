@@ -138,8 +138,10 @@ class PlaywrightBrowserSimulator:
             url = f"https://space.bilibili.com/{uid}/video?tid=0&keyword=&order=pubdate"
             
             try:
-                # 优化：使用更短的首页导航超时时间
-                await self.page.goto(url, wait_until='networkidle', timeout=TIMING_CONFIG["network_timeout"])
+                # 修复：避免使用networkidle，改用domcontentloaded提高速度
+                await self.page.goto(url, wait_until='domcontentloaded', timeout=TIMING_CONFIG["network_timeout"])
+                # 短暂等待确保关键元素加载完成
+                await self.page.wait_for_timeout(300)
             except Exception as e:
                 logger.error(f"Playwright导航到页面失败: {e}")
                 raise
@@ -155,16 +157,16 @@ class PlaywrightBrowserSimulator:
                 raise
         
         try:
-            # 等待视频列表加载，使用优化的超时时间
+            # 等待视频列表加载，使用优化的超时时间但降低要求
             await self.page.wait_for_selector('.small-item, .bili-video-card', timeout=TIMING_CONFIG["element_timeout"])
             
-            # 优化：使用快速滚动一次性触发懒加载，无需逐步滚动
+            # 优化：使用异步滚动，避免阻塞
             await self.page.evaluate("""
                 () => {
-                    // 快速滚动到页面底部触发懒加载
-                    window.scrollTo(0, document.body.scrollHeight);
-                    // 回到顶部确保所有内容可见
-                    window.scrollTo(0, 0);
+                    // 快速异步滚动到页面底部触发懒加载
+                    window.scrollTo({top: document.body.scrollHeight, behavior: 'instant'});
+                    // 快速回到顶部确保所有内容可见
+                    setTimeout(() => window.scrollTo({top: 0, behavior: 'instant'}), 50);
                 }
             """)
             
@@ -284,9 +286,9 @@ class PlaywrightBrowserSimulator:
                         # 点击按钮
                         await button.click()
                         
-                        # 优化：使用更短的网络等待时间
-                        await self.page.wait_for_load_state('networkidle', timeout=TIMING_CONFIG["network_timeout"])
-                        await self.page.wait_for_timeout(TIMING_CONFIG["post_action_wait"])  # 减少的等待时间
+                        # 修复：避免使用networkidle，改用domcontentloaded提高速度
+                        await self.page.wait_for_load_state('domcontentloaded', timeout=TIMING_CONFIG["network_timeout"])
+                        await self.page.wait_for_timeout(TIMING_CONFIG["post_action_wait"])
                         
                         button_found = True
                         logger.info(f"成功点击第{target_page_num}页分页按钮")
@@ -316,7 +318,8 @@ class PlaywrightBrowserSimulator:
                             await self.page.wait_for_timeout(TIMING_CONFIG["pagination_wait"])
                             await button.click()
                             
-                            await self.page.wait_for_load_state('networkidle', timeout=TIMING_CONFIG["network_timeout"])
+                            # 修复：避免使用networkidle，改用domcontentloaded提高速度
+                            await self.page.wait_for_load_state('domcontentloaded', timeout=TIMING_CONFIG["network_timeout"])
                             await self.page.wait_for_timeout(TIMING_CONFIG["post_action_wait"])
                             
                             button_found = True
