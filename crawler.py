@@ -373,54 +373,6 @@ class PlaywrightBrowserSimulator:
             return []
             
         soup = BeautifulSoup(html_content, 'html.parser')
-        videos = []
-        
-        # 首先尝试从JavaScript状态数据解析
-        script_tags = soup.find_all('script')
-        for script in script_tags:
-            script_content = script.string
-            if script_content and 'window.__INITIAL_STATE__' in script_content:
-                try:
-                    # 提取JSON数据
-                    start = script_content.find('window.__INITIAL_STATE__=') + len('window.__INITIAL_STATE__=')
-                    end = script_content.find(';(function()', start)
-                    if end == -1:
-                        end = script_content.find('</script>', start)
-                    
-                    json_str = script_content[start:end].strip()
-                    if json_str.endswith(';'):
-                        json_str = json_str[:-1]
-                    
-                    initial_state = json.loads(json_str)
-                    
-                    # 从初始状态中提取视频数据
-                    if 'space' in initial_state and 'videoList' in initial_state['space']:
-                        video_list = initial_state['space']['videoList']
-                        if 'list' in video_list and 'vlist' in video_list['list']:
-                            for video in video_list['list']['vlist']:
-                                videos.append({
-                                    'aid': video.get('aid', 0),
-                                    'view': video.get('play', 0),
-                                    'comment': video.get('comment', 0),
-                                    'title': video.get('title', ''),
-                                    'created': video.get('created', 0)
-                                })
-                    
-                    if videos:
-                        logger.info(f"从JavaScript状态解析到 {len(videos)} 个视频")
-                        return videos
-                    else:
-                        logger.debug("JavaScript状态中没有找到视频数据")
-                        
-                except json.JSONDecodeError as e:
-                    logger.debug(f"解析JSON失败: {e}")
-                    continue
-                except Exception as e:
-                    logger.debug(f"解析初始状态失败: {e}")
-                    continue
-        
-        # 如果JS解析失败，回退到HTML解析
-        logger.info("JavaScript状态解析失败，回退到HTML解析")
         return self._parse_videos_from_html_elements(soup)
     
     def _parse_videos_from_html_elements(self, soup):
