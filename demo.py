@@ -10,7 +10,7 @@ Li Daxiao Index Calculation Program - Demo Script
 import datetime
 import asyncio
 from config import BILIBILI_UID, DEFAULT_DAYS_RANGE
-from crawler import fetch_videos, PLAYWRIGHT_AVAILABLE
+from crawler import fetch_videos, PLAYWRIGHT_AVAILABLE, enable_fast_mode, disable_fast_mode
 from calculator import calculate_index
 from storage import save_all_data, load_history_data
 from visualizer import generate_all_charts
@@ -170,6 +170,70 @@ async def demo_full_workflow():
         print("  3. 检查Playwright是否正确安装")
         return False
 
+async def demo_fast_mode():
+    """演示快速模式"""
+    print("🚀 快速模式演示")
+    print("=" * 50)
+    
+    if not PLAYWRIGHT_AVAILABLE:
+        print("❌ Playwright库未安装")
+        print("请先安装: pip install playwright && playwright install chromium")
+        print()
+        return False, [], 0.0
+    
+    # 设置短日期范围以快速演示
+    end_date = datetime.date.today().strftime("%Y-%m-%d")
+    start_date = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    print(f"📅 获取日期范围: {start_date} 至 {end_date}")
+    print(f"👤 UP主UID: {BILIBILI_UID}")
+    print("🚀 启用快速模式以提高响应速度...")
+    print()
+    
+    try:
+        # 启用快速模式
+        enable_fast_mode()
+        
+        print("⚡ 快速模式已启用，减少等待时间...")
+        print("⏳ 开始获取视频数据...")
+        
+        start_time = datetime.datetime.now()
+        videos = await fetch_videos(
+            uid=BILIBILI_UID,
+            start_date=start_date,
+            end_date=end_date
+        )
+        end_time = datetime.datetime.now()
+        
+        duration = (end_time - start_time).total_seconds()
+        
+        print(f"✅ 快速模式下成功获取到 {len(videos)} 个视频")
+        print(f"⏱️  耗时: {duration:.1f} 秒")
+        print("🎯 快速模式特色功能:")
+        print("  • 减少页面加载等待时间")
+        print("  • 优化分页点击响应速度")
+        print("  • 降低网络超时时间")
+        print("  • 提高界面操作流畅度")
+        
+        # 计算指数
+        index_value = calculate_index(videos)
+        print(f"📊 李大霄指数: {index_value:.2f}")
+        print()
+        
+        # 恢复标准模式
+        disable_fast_mode()
+        print("🔄 已恢复标准模式")
+        
+        return True, videos, index_value
+        
+    except Exception as e:
+        print(f"❌ 快速模式失败: {e}")
+        disable_fast_mode()
+        print("🔄 已恢复标准模式")
+        print()
+        return False, [], 0.0
+
+
 async def main():
     """主演示函数"""
     print("🌟 李大霄指数计算程序 - 功能演示")
@@ -181,7 +245,8 @@ async def main():
     print("📋 演示计划:")
     print("1. API模式 - 快速获取数据")
     print("2. Playwright模式 - 浏览器自动化")  
-    print("3. 完整工作流程 - 数据获取、计算、保存、可视化")
+    print("3. 快速模式 - 提高界面响应速度")
+    print("4. 完整工作流程 - 数据获取、计算、保存、可视化")
     print()
     
     input("按回车键开始演示...")
@@ -196,10 +261,16 @@ async def main():
     # 2. Playwright模式演示
     playwright_success, pw_videos, pw_index = await demo_playwright_mode()
     
+    input("按回车键继续快速模式演示...")
+    print()
+    
+    # 3. 快速模式演示
+    fast_success, fast_videos, fast_index = await demo_fast_mode()
+    
     input("按回车键继续完整流程演示...")
     print()
     
-    # 3. 完整工作流程演示
+    # 4. 完整工作流程演示
     full_success = await demo_full_workflow()
     
     # 总结
@@ -208,16 +279,23 @@ async def main():
     print("-" * 40)
     print(f"API模式:      {'✅ 成功' if api_success else '❌ 失败'}")
     print(f"Playwright模式: {'✅ 成功' if playwright_success else '❌ 失败'}")
+    print(f"快速模式:     {'✅ 成功' if fast_success else '❌ 失败'}")
     print(f"完整流程:     {'✅ 成功' if full_success else '❌ 失败'}")
     print()
     
-    if api_success or playwright_success:
+    if api_success or playwright_success or fast_success:
         print("🎯 推荐使用方式:")
+        if fast_success:
+            print("  python3 lidaxiao.py --fast            # 快速响应模式")
         if playwright_success:
-            print("  python3 lidaxiao.py --mode playwright  # 最稳定可靠")
+            print("  python3 lidaxiao.py                   # 标准模式")
         if api_success:
-            print("  python3 lidaxiao.py --mode api         # 开发调试")
-        print("  python3 lidaxiao.py --mode auto        # 智能选择")
+            print("  python3 lidaxiao.py --mode api        # 开发调试")
+        print()
+        print("💡 性能优化建议:")
+        print("  • 使用 --fast 参数可显著提高界面响应速度")
+        print("  • 使用 --headless 参数可在后台运行以节省资源")
+        print("  • 使用较小的日期范围可减少数据获取时间")
     else:
         print("💡 请检查网络连接和依赖安装后重试")
 
