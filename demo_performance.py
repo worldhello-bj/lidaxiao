@@ -11,7 +11,7 @@ import asyncio
 import datetime
 import time
 from config import BILIBILI_UID
-from crawler import fetch_videos, enable_fast_mode, enable_stable_mode, apply_performance_mode
+from crawler import fetch_videos, enable_fast_mode, enable_stable_mode, configure_browser_settings
 
 async def demo_performance_modes():
     """演示不同性能模式的效果"""
@@ -48,7 +48,15 @@ async def demo_performance_modes():
         
         # 演示平衡模式
         print("⚖️  平衡模式演示:")
-        apply_performance_mode("balanced")
+        configure_browser_settings(
+            page_load_wait=200,
+            pagination_wait=100,
+            post_action_wait=300,
+            page_interval_min=0.3,
+            page_interval_max=0.6,
+            network_timeout=5000,
+            element_timeout=3000
+        )
         print("  • 平衡性能和稳定性")
         print("  • 预计单页处理时间: ~1.1秒")
         print("  • 30页总时间: ~31秒")
@@ -71,9 +79,9 @@ async def demo_performance_modes():
         print("✅ 性能模式演示完成")
         print()
         print("💡 使用建议:")
-        print("• 日常使用：balanced 模式 (推荐)")
-        print("• 快速爬取：fast 模式")  
-        print("• 调试问题：stable 模式")
+        print("• 日常使用：调用 configure_browser_settings() 设置合适参数")
+        print("• 快速爬取：enable_fast_mode()")  
+        print("• 调试问题：enable_stable_mode()")
         
         return True
         
@@ -95,10 +103,10 @@ def show_optimization_details():
     print("   - 移除冗余的滚动操作")
     print("   - 优化时间戳提取算法")
     print()
-    print("3. 智能配置:")
-    print("   - 添加性能模式切换")
-    print("   - 动态调整超时时间")
-    print("   - 减少不必要的页面限制")
+    print("3. 直接配置:")
+    print("   - 可直接修改 TIMING_CONFIG 参数")
+    print("   - 使用 configure_browser_settings() 动态调整")
+    print("   - 移除复杂的模式系统，简化使用")
 
 async def main():
     """主函数"""

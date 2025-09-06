@@ -39,75 +39,23 @@ BROWSER_CONFIG = {
     "retry_attempts": 3,         # 重试次数
     "retry_delay": 2,            # 重试延迟(秒)
     "page_delay": 1,             # 页面间隔(秒)
-    "performance_mode": "fast",  # 性能模式: fast(快速), balanced(平衡), stable(稳定)
 }
 
-# 时间配置 - 性能优化：大幅减少等待时间提升爬取速度
+# 时间配置 - 性能优化：减少等待时间提升爬取速度
 TIMING_CONFIG = {
-    "page_load_wait": 200,       # 页面加载等待时间(毫秒) - 减少60%等待时间
-    "pagination_wait": 100,      # 分页点击等待时间(毫秒) - 减少67%等待时间
-    "post_action_wait": 300,     # 操作后等待时间(毫秒) - 减少62%等待时间
-    "page_interval_min": 0.3,    # 页面间最小间隔(秒) - 减少70%页面间隔
-    "page_interval_max": 0.6,    # 页面间最大间隔(秒) - 减少70%页面间隔
-    "failure_wait_min": 0.2,     # 失败后最小等待(秒) - 快速重试
-    "failure_wait_max": 0.5,     # 失败后最大等待(秒) - 快速重试
-    "network_timeout": 5000,     # 网络超时(毫秒) - 减少37%网络等待
-    "element_timeout": 3000,     # 元素等待超时(毫秒) - 减少40%元素等待
+    "page_load_wait": 150,       # 页面加载等待时间(毫秒)
+    "pagination_wait": 50,       # 分页点击等待时间(毫秒)
+    "post_action_wait": 200,     # 操作后等待时间(毫秒)
+    "page_interval_min": 0.2,    # 页面间最小间隔(秒)
+    "page_interval_max": 0.4,    # 页面间最大间隔(秒)
+    "failure_wait_min": 0.2,     # 失败后最小等待(秒)
+    "failure_wait_max": 0.5,     # 失败后最大等待(秒)
+    "network_timeout": 4000,     # 网络超时(毫秒)
+    "element_timeout": 2000,     # 元素等待超时(毫秒)
 }
-
-# 性能模式配置 - 允许动态调整性能和稳定性的平衡
-PERFORMANCE_MODES = {
-    "fast": {
-        "page_load_wait": 150,
-        "pagination_wait": 50, 
-        "post_action_wait": 200,
-        "page_interval_min": 0.2,
-        "page_interval_max": 0.4,
-        "network_timeout": 4000,
-        "element_timeout": 2000,
-    },
-    "balanced": {
-        "page_load_wait": 200,
-        "pagination_wait": 100,
-        "post_action_wait": 300,
-        "page_interval_min": 0.3,
-        "page_interval_max": 0.6,
-        "network_timeout": 5000,
-        "element_timeout": 3000,
-    },
-    "stable": {
-        "page_load_wait": 300,
-        "pagination_wait": 200,
-        "post_action_wait": 500,
-        "page_interval_min": 0.5,
-        "page_interval_max": 1.0,
-        "network_timeout": 8000,
-        "element_timeout": 5000,
-    }
-}
-
-# 历史指数计算配置 (已简化 - 不再使用数学模型)
-
-# 历史计算支持的模式 (现在只使用当前数据近似)
-HISTORICAL_APPROXIMATION_MODE = "current_data_as_historical"
 
 # 错误消息配置
 ERROR_MESSAGES = {
     "network": "网络连接失败。请检查网络连接和防火墙设置",
     "playwright": "Playwright浏览器启动失败。请确保已正确安装: pip install playwright && playwright install chromium",
 }
-
-def apply_performance_mode(mode="balanced"):
-    """应用性能模式配置
-    
-    Args:
-        mode: 性能模式 - fast(快速), balanced(平衡), stable(稳定)
-    """
-    global TIMING_CONFIG
-    if mode in PERFORMANCE_MODES:
-        TIMING_CONFIG.update(PERFORMANCE_MODES[mode])
-        print(f"已切换到 {mode} 性能模式")
-        return True
-    else:
-        print(f"未知性能模式: {mode}，可用模式: {list(PERFORMANCE_MODES.keys())}")
-        return False

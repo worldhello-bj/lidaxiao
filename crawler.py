@@ -15,7 +15,7 @@ import asyncio
 import logging
 import time
 import re
-from config import BROWSER_CONFIG, ERROR_MESSAGES, TIMING_CONFIG, apply_performance_mode
+from config import BROWSER_CONFIG, ERROR_MESSAGES, TIMING_CONFIG
 
 try:
     from bs4 import BeautifulSoup
@@ -712,11 +712,6 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
     if not PLAYWRIGHT_AVAILABLE:
         raise ImportError("Playwright库不可用，请安装: pip install playwright && playwright install chromium")
     
-    # 应用性能模式配置
-    performance_mode = BROWSER_CONFIG.get("performance_mode", "balanced")
-    apply_performance_mode(performance_mode)
-    logger.info(f"已启用 {performance_mode} 性能模式")
-    
     # 如果未指定headless参数，使用配置文件中的设置
     if headless is None:
         headless = BROWSER_CONFIG["headless"]
@@ -861,32 +856,56 @@ def configure_browser_settings(**kwargs):
     - page_delay: 页面间隔
     - headless: 是否无头模式
     - browser_type: 浏览器类型
-    - performance_mode: 性能模式 (fast/balanced/stable)
-    """
-    # 处理性能模式
-    if 'performance_mode' in kwargs:
-        mode = kwargs.pop('performance_mode')
-        apply_performance_mode(mode)
     
-    # 处理其他配置
+    时间配置参数:
+    - page_load_wait: 页面加载等待时间(毫秒)
+    - pagination_wait: 分页点击等待时间(毫秒)
+    - post_action_wait: 操作后等待时间(毫秒)
+    - page_interval_min: 页面间最小间隔(秒)
+    - page_interval_max: 页面间最大间隔(秒)
+    - network_timeout: 网络超时(毫秒)
+    - element_timeout: 元素等待超时(毫秒)
+    """
+    global TIMING_CONFIG
+    
+    # 处理浏览器配置
     for key, value in kwargs.items():
         if key in BROWSER_CONFIG:
             BROWSER_CONFIG[key] = value
             logger.info(f"已更新浏览器配置 {key} = {value}")
+        elif key in TIMING_CONFIG:
+            TIMING_CONFIG[key] = value
+            logger.info(f"已更新时间配置 {key} = {value}")
         else:
             logger.warning(f"未知配置项: {key}")
 
 
 def enable_fast_mode():
     """启用快速模式 - 一键优化性能"""
-    apply_performance_mode("fast")
+    TIMING_CONFIG.update({
+        "page_load_wait": 150,
+        "pagination_wait": 50,
+        "post_action_wait": 200,
+        "page_interval_min": 0.2,
+        "page_interval_max": 0.4,
+        "network_timeout": 4000,
+        "element_timeout": 2000,
+    })
     BROWSER_CONFIG["headless"] = True  # 启用无头模式提高速度
     logger.info("已启用快速模式：无头浏览器 + 最短等待时间")
 
 
 def enable_stable_mode():
     """启用稳定模式 - 确保最大兼容性"""
-    apply_performance_mode("stable")
+    TIMING_CONFIG.update({
+        "page_load_wait": 300,
+        "pagination_wait": 200,
+        "post_action_wait": 500,
+        "page_interval_min": 0.5,
+        "page_interval_max": 1.0,
+        "network_timeout": 8000,
+        "element_timeout": 5000,
+    })
     BROWSER_CONFIG["headless"] = False  # 显示浏览器便于调试
     logger.info("已启用稳定模式：显示浏览器 + 较长等待时间")
 
@@ -914,18 +933,18 @@ def get_troubleshooting_info():
         f"- 页面加载等待: {TIMING_CONFIG.get('page_load_wait', 'N/A')} 毫秒",
         f"- 分页等待: {TIMING_CONFIG.get('pagination_wait', 'N/A')} 毫秒",
         f"- 网络超时: {TIMING_CONFIG.get('network_timeout', 'N/A')} 毫秒",
-        f"- 性能模式: {BROWSER_CONFIG.get('performance_mode', 'balanced')}",
+        f"- 性能配置: 页面加载等待={TIMING_CONFIG.get('page_load_wait', 'N/A')}ms, 网络超时={TIMING_CONFIG.get('network_timeout', 'N/A')}ms",
         "",
         "性能优化建议:",
         "• 使用快速模式: 在代码中调用 enable_fast_mode()",
         "• 使用无头模式: python3 lidaxiao.py --headless",
         "• 减少页面数: 使用较小的日期范围",
-        "• 性能模式选择: fast(最快,可能不稳定) | balanced(平衡) | stable(最稳定,较慢)",
+        "• 直接配置时间: 修改 TIMING_CONFIG 中的参数",
         "",
         "快速优化方法:",
         "1. 导入: from crawler import enable_fast_mode",
         "2. 调用: enable_fast_mode()  # 启用4倍速度优化",
-        "3. 或者: apply_performance_mode('fast')  # 仅优化时间配置",
+        "3. 或者: configure_browser_settings(page_load_wait=100, network_timeout=3000)",
         "",
         "推荐解决方案:",
         "1. 检查网络连接和防火墙设置",

@@ -10,7 +10,7 @@ Performance Optimization Usage Guide
 import asyncio
 import datetime
 import time
-from config import BILIBILI_UID, apply_performance_mode
+from config import BILIBILI_UID
 from crawler import (
     fetch_videos, 
     enable_fast_mode, 
@@ -35,18 +35,18 @@ def print_usage_guide():
     print("```")
     print()
     
-    print("⚙️ 自定义性能模式:")
+    print("⚙️ 自定义时间配置:")
     print("```python")
-    print("from config import apply_performance_mode")
+    print("from crawler import configure_browser_settings")
     print()
-    print("# 快速模式 - 最快速度，可能不稳定")
-    print("apply_performance_mode('fast')")
-    print()
-    print("# 平衡模式 - 推荐日常使用")
-    print("apply_performance_mode('balanced')")
-    print()
-    print("# 稳定模式 - 最稳定，速度较慢")  
-    print("apply_performance_mode('stable')")
+    print("# 自定义配置 - 直接设置参数")
+    print("configure_browser_settings(")
+    print("    page_load_wait=150,      # 页面加载等待(毫秒)")
+    print("    pagination_wait=50,      # 分页等待(毫秒)")
+    print("    page_interval_min=0.2,   # 最小页面间隔(秒)")
+    print("    page_interval_max=0.4,   # 最大页面间隔(秒)")
+    print("    network_timeout=4000,    # 网络超时(毫秒)")
+    print(")")
     print("```")
     print()
     
@@ -56,28 +56,29 @@ def print_usage_guide():
     print()
     print("# 自定义配置")
     print("configure_browser_settings(")
-    print("    performance_mode='fast',  # 性能模式")
     print("    headless=True,           # 无头模式")
     print("    retry_attempts=2,        # 重试次数")
+    print("    page_load_wait=100,      # 页面加载等待(毫秒)")
+    print("    network_timeout=3000,    # 网络超时(毫秒)")
     print(")")
     print("```")
     print()
     
     print("📊 性能对比:")
     print("+----------+------------+----------+----------+")
-    print("| 模式     | 单页时间   | 30页时间 | 速度倍数 |")
+    print("| 配置     | 单页时间   | 30页时间 | 速度倍数 |")
     print("+----------+------------+----------+----------+")
     print("| 原始     | 3.1秒      | 1.6分钟  | 1.0x     |")
-    print("| stable   | 1.8秒      | 0.9分钟  | 1.7x     |")
-    print("| balanced | 1.1秒      | 0.5分钟  | 2.8x     |")
-    print("| fast     | 0.7秒      | 0.3分钟  | 4.4x     |")
+    print("| 稳定     | 1.8秒      | 0.9分钟  | 1.7x     |")
+    print("| 默认     | 1.1秒      | 0.5分钟  | 2.8x     |")
+    print("| 快速     | 0.7秒      | 0.3分钟  | 4.4x     |")
     print("+----------+------------+----------+----------+")
     print()
     
     print("💡 使用建议:")
-    print("• 🏃 快速爬取大量数据：使用 fast 模式")
-    print("• ⚖️ 日常稳定使用：使用 balanced 模式 (默认)")
-    print("• 🐌 调试问题时：使用 stable 模式")
+    print("• 🏃 快速爬取大量数据：enable_fast_mode()")
+    print("• ⚖️ 日常稳定使用：使用默认配置")
+    print("• 🐌 调试问题时：enable_stable_mode()")
     print("• 🖥️ 服务器环境：启用 headless=True")
     print("• 🔄 网络不稳定：增加 retry_attempts")
 
@@ -107,27 +108,28 @@ async def demo_usage_examples():
     print("示例2: 自定义高性能配置")
     print("```python")
     print("configure_browser_settings(")
-    print("    performance_mode='fast',")
     print("    headless=True,")
-    print("    retry_attempts=1  # 减少重试提高速度")
+    print("    retry_attempts=1,        # 减少重试提高速度")
+    print("    page_load_wait=100,      # 更短页面加载等待")
+    print("    network_timeout=3000     # 更短网络超时")
     print(")")
     print("```")
     configure_browser_settings(
-        performance_mode='fast',
         headless=True,
-        retry_attempts=1
+        retry_attempts=1,
+        page_load_wait=100,
+        network_timeout=3000
     )
     print("✅ 已应用自定义高性能配置")
     print()
     
-    # 示例3：平衡模式
-    print("示例3: 平衡模式 (推荐)")
+    # 示例3：使用默认配置
+    print("示例3: 使用默认配置 (推荐)")
     print("```python")
-    print("apply_performance_mode('balanced')  # 平衡性能和稳定性")
+    print("# 默认配置已经是优化过的，无需额外设置")
     print("videos = await fetch_videos(uid, start_date, end_date)")
     print("```")
-    apply_performance_mode('balanced')
-    print("✅ 已切换到平衡模式")
+    print("✅ 使用默认优化配置")
     print()
     
     print("🎉 所有示例演示完成！")
@@ -147,7 +149,7 @@ def show_troubleshooting():
     
     print("问题：爬取过程中经常失败")
     print("解决方案：")
-    print("1. 使用 stable 模式")
+    print("1. 使用 enable_stable_mode()")
     print("2. 增加重试次数 retry_attempts")
     print("3. 检查防火墙设置")
     print()
@@ -156,7 +158,7 @@ def show_troubleshooting():
     print("解决方案：")
     print("1. 必须启用 headless=True")
     print("2. 确保安装了 Playwright：pip install playwright && playwright install chromium")
-    print("3. 使用 balanced 或 fast 模式")
+    print("3. 使用 enable_fast_mode() 或默认配置")
 
 def main():
     """主函数"""

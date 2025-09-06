@@ -11,7 +11,7 @@ import asyncio
 import time
 import sys
 import logging
-from config import TIMING_CONFIG, BROWSER_CONFIG, apply_performance_mode
+from config import TIMING_CONFIG, BROWSER_CONFIG
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -21,47 +21,60 @@ def test_timing_configuration():
     """测试时间配置优化"""
     print("=== 时间配置优化测试 ===")
     
-    # 显示默认配置
-    print("\n当前配置 (balanced模式):")
+    # 显示当前配置
+    print("\n当前配置 (默认优化配置):")
     for key, value in TIMING_CONFIG.items():
         print(f"  {key}: {value}")
     
-    # 测试快速模式
-    print("\n切换到快速模式:")
-    apply_performance_mode("fast")
-    for key, value in TIMING_CONFIG.items():
-        print(f"  {key}: {value}")
+    # 测试备份和恢复配置
+    print("\n测试配置修改:")
+    original_config = TIMING_CONFIG.copy()
     
-    # 测试稳定模式
-    print("\n切换到稳定模式:")
-    apply_performance_mode("stable")
-    for key, value in TIMING_CONFIG.items():
-        print(f"  {key}: {value}")
+    # 修改配置
+    TIMING_CONFIG["page_load_wait"] = 100
+    print(f"  修改后 page_load_wait: {TIMING_CONFIG['page_load_wait']}")
     
-    # 恢复平衡模式
-    apply_performance_mode("balanced")
-    print("\n恢复到平衡模式")
+    # 恢复配置
+    TIMING_CONFIG.update(original_config)
+    print(f"  恢复后 page_load_wait: {TIMING_CONFIG['page_load_wait']}")
+    
+    print("\n✅ 配置系统工作正常")
 
 def simulate_page_timing():
     """模拟页面处理时间计算"""
     print("\n=== 页面处理时间模拟 ===")
     
-    modes = ["fast", "balanced", "stable"]
-    for mode in modes:
-        apply_performance_mode(mode)
-        
+    configs = {
+        "快速配置": {
+            "page_load_wait": 100,
+            "pagination_wait": 30,
+            "post_action_wait": 150,
+            "page_interval_min": 0.1,
+            "page_interval_max": 0.3,
+        },
+        "默认配置": TIMING_CONFIG.copy(),
+        "稳定配置": {
+            "page_load_wait": 300,
+            "pagination_wait": 200,
+            "post_action_wait": 500,
+            "page_interval_min": 0.5,
+            "page_interval_max": 1.0,
+        }
+    }
+    
+    for config_name, config in configs.items():
         # 计算单页处理时间 (毫秒)
         single_page_time = (
-            TIMING_CONFIG["page_load_wait"] +
-            TIMING_CONFIG["pagination_wait"] +
-            TIMING_CONFIG["post_action_wait"] +
-            (TIMING_CONFIG["page_interval_min"] + TIMING_CONFIG["page_interval_max"]) / 2 * 1000
+            config["page_load_wait"] +
+            config["pagination_wait"] +
+            config["post_action_wait"] +
+            (config["page_interval_min"] + config["page_interval_max"]) / 2 * 1000
         )
         
         # 计算30页的总时间
         total_time_30_pages = single_page_time * 30 / 1000  # 转换为秒
         
-        print(f"{mode}模式:")
+        print(f"{config_name}:")
         print(f"  单页处理时间: {single_page_time:.0f}ms ({single_page_time/1000:.1f}s)")
         print(f"  30页总时间: {total_time_30_pages:.1f}s ({total_time_30_pages/60:.1f}分钟)")
 
