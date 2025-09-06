@@ -41,6 +41,19 @@ BROWSER_CONFIG = {
     "page_delay": 1,             # 页面间隔(秒)
 }
 
+# 时间配置 - 优化的等待时间以提高界面响应速度
+TIMING_CONFIG = {
+    "page_load_wait": 500,       # 页面加载等待时间(毫秒) - 优化后的响应时间
+    "pagination_wait": 300,      # 分页点击等待时间(毫秒) - 减少分页延迟
+    "post_action_wait": 800,     # 操作后等待时间(毫秒) - 平衡速度和稳定性
+    "page_interval_min": 1.0,    # 页面间最小间隔(秒) - 加快页面切换
+    "page_interval_max": 2.0,    # 页面间最大间隔(秒)
+    "failure_wait_min": 0.5,     # 失败后最小等待(秒) - 快速重试
+    "failure_wait_max": 1.0,     # 失败后最大等待(秒)
+    "network_timeout": 8000,     # 网络超时(毫秒) - 更合理的超时时间
+    "element_timeout": 5000,     # 元素等待超时(毫秒) - 元素查找超时
+}
+
 # 历史指数计算配置 (已简化 - 不再使用数学模型)
 
 # 历史计算支持的模式 (现在只使用当前数据近似)

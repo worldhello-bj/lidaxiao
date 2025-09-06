@@ -181,7 +181,8 @@ async def main():
     print("📋 演示计划:")
     print("1. API模式 - 快速获取数据")
     print("2. Playwright模式 - 浏览器自动化")  
-    print("3. 完整工作流程 - 数据获取、计算、保存、可视化")
+    print("3. 快速模式 - 提高界面响应速度")
+    print("4. 完整工作流程 - 数据获取、计算、保存、可视化")
     print()
     
     input("按回车键开始演示...")
@@ -190,7 +191,7 @@ async def main():
     # 1. API模式演示
     api_success, api_videos, api_index = await demo_api_mode()
     
-    input("按回车键继续下一个演示...")
+    input("按回车键继续Playwright模式演示...")
     print()
     
     # 2. Playwright模式演示
@@ -214,10 +215,14 @@ async def main():
     if api_success or playwright_success:
         print("🎯 推荐使用方式:")
         if playwright_success:
-            print("  python3 lidaxiao.py --mode playwright  # 最稳定可靠")
+            print("  python3 lidaxiao.py                   # 标准模式")
         if api_success:
-            print("  python3 lidaxiao.py --mode api         # 开发调试")
-        print("  python3 lidaxiao.py --mode auto        # 智能选择")
+            print("  python3 lidaxiao.py --mode api        # 开发调试")
+        print()
+        print("💡 性能优化建议:")
+        print("  • 使用 --headless 参数可在后台运行以节省资源")
+        print("  • 使用较小的日期范围可减少数据获取时间")
+        print("  • 可在config.py中调整TIMING_CONFIG以平衡速度和稳定性")
     else:
         print("💡 请检查网络连接和依赖安装后重试")
 
