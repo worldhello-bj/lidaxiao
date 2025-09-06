@@ -39,20 +39,19 @@ BROWSER_CONFIG = {
     "retry_attempts": 3,         # 重试次数
     "retry_delay": 2,            # 重试延迟(秒)
     "page_delay": 1,             # 页面间隔(秒)
-    "fast_mode": False,          # 快速模式：减少等待时间，提高界面响应速度
 }
 
-# 快速模式配置 - 显著减少等待时间以提高界面响应速度
-FAST_MODE_CONFIG = {
-    "page_load_wait": 500,       # 页面加载等待时间(毫秒) - 从2000ms减少到500ms
-    "pagination_wait": 300,      # 分页点击等待时间(毫秒) - 从1000ms减少到300ms
-    "post_action_wait": 800,     # 操作后等待时间(毫秒) - 从2000ms减少到800ms
-    "page_interval_min": 1.0,    # 页面间最小间隔(秒) - 从3-6秒减少到1-2秒
+# 时间配置 - 优化的等待时间以提高界面响应速度
+TIMING_CONFIG = {
+    "page_load_wait": 500,       # 页面加载等待时间(毫秒) - 优化后的响应时间
+    "pagination_wait": 300,      # 分页点击等待时间(毫秒) - 减少分页延迟
+    "post_action_wait": 800,     # 操作后等待时间(毫秒) - 平衡速度和稳定性
+    "page_interval_min": 1.0,    # 页面间最小间隔(秒) - 加快页面切换
     "page_interval_max": 2.0,    # 页面间最大间隔(秒)
-    "failure_wait_min": 0.5,     # 失败后最小等待(秒) - 从2-4秒减少到0.5-1秒
+    "failure_wait_min": 0.5,     # 失败后最小等待(秒) - 快速重试
     "failure_wait_max": 1.0,     # 失败后最大等待(秒)
-    "network_timeout": 8000,     # 网络超时(毫秒) - 从15000ms减少到8000ms
-    "element_timeout": 5000,     # 元素等待超时(毫秒) - 从15000ms减少到5000ms
+    "network_timeout": 8000,     # 网络超时(毫秒) - 更合理的超时时间
+    "element_timeout": 5000,     # 元素等待超时(毫秒) - 元素查找超时
 }
 
 # 历史指数计算配置 (已简化 - 不再使用数学模型)

@@ -204,8 +204,6 @@ async def main():
                        help='强制使用无头模式 (后台运行浏览器，用于服务器环境)')
     parser.add_argument('--no-headless', action='store_true', default=None,
                        help='强制使用有头模式 (显示浏览器窗口，用于调试和测试)')
-    parser.add_argument('--fast', action='store_true', default=False,
-                       help='启用快速模式 (减少等待时间，提高界面响应速度)')
     
     # 历史计算功能参数
     parser.add_argument('--historical', action='store_true',
@@ -216,12 +214,6 @@ async def main():
                        help='历史日期范围，格式: start_date,end_date (YYYY-MM-DD,YYYY-MM-DD)')
     
     args = parser.parse_args()
-    
-    # 处理快速模式
-    if args.fast:
-        from crawler import enable_fast_mode
-        enable_fast_mode()
-        print("🚀 已启用快速模式 - 减少等待时间以提高响应速度")
     
     # 处理headless模式参数
     headless_mode = None
