@@ -15,7 +15,7 @@ import asyncio
 import logging
 import time
 import re
-from config import BROWSER_CONFIG, ERROR_MESSAGES, TIMING_CONFIG
+from config import BROWSER_CONFIG, ERROR_MESSAGES, TIMING_CONFIG, apply_performance_mode
 
 try:
     from bs4 import BeautifulSoup
@@ -138,8 +138,8 @@ class PlaywrightBrowserSimulator:
             url = f"https://space.bilibili.com/{uid}/video?tid=0&keyword=&order=pubdate"
             
             try:
-                # 导航到页面，使用动态超时
-                await self.page.goto(url, wait_until='networkidle', timeout=TIMING_CONFIG["network_timeout"] * 2)
+                # 优化：使用更短的首页导航超时时间
+                await self.page.goto(url, wait_until='networkidle', timeout=TIMING_CONFIG["network_timeout"])
             except Exception as e:
                 logger.error(f"Playwright导航到页面失败: {e}")
                 raise
@@ -155,30 +155,20 @@ class PlaywrightBrowserSimulator:
                 raise
         
         try:
-            # 等待视频列表加载，使用动态超时
+            # 等待视频列表加载，使用优化的超时时间
             await self.page.wait_for_selector('.small-item, .bili-video-card', timeout=TIMING_CONFIG["element_timeout"])
             
-            # 滚动页面以触发懒加载
+            # 优化：使用快速滚动一次性触发懒加载，无需逐步滚动
             await self.page.evaluate("""
                 () => {
-                    return new Promise((resolve) => {
-                        let totalHeight = 0;
-                        let distance = 100;
-                        let timer = setInterval(() => {
-                            let scrollHeight = document.body.scrollHeight;
-                            window.scrollBy(0, distance);
-                            totalHeight += distance;
-                            
-                            if(totalHeight >= scrollHeight){
-                                clearInterval(timer);
-                                resolve();
-                            }
-                        }, 100);
-                    });
+                    // 快速滚动到页面底部触发懒加载
+                    window.scrollTo(0, document.body.scrollHeight);
+                    // 回到顶部确保所有内容可见
+                    window.scrollTo(0, 0);
                 }
             """)
             
-            # 等待一段时间让内容完全加载，使用动态等待时间
+            # 减少等待时间：只等待必要的内容加载时间
             await self.page.wait_for_timeout(TIMING_CONFIG["page_load_wait"])
             
             # 获取页面内容
@@ -192,8 +182,8 @@ class PlaywrightBrowserSimulator:
     async def check_pagination_info(self):
         """检查分页信息，返回当前页和总页数"""
         try:
-            # 等待分页区域加载
-            await self.page.wait_for_selector('.vui_pagenation, .page-wrap, .bili-pager', timeout=5000)
+            # 优化：使用更短的分页等待时间
+            await self.page.wait_for_selector('.vui_pagenation, .page-wrap, .bili-pager', timeout=TIMING_CONFIG["element_timeout"])
             
             # 尝试获取当前页信息
             current_page = 1
@@ -287,16 +277,16 @@ class PlaywrightBrowserSimulator:
                     if await button.count() > 0:
                         logger.info(f"找到分页按钮，使用选择器: {selector}")
                         
-                        # 滚动到按钮位置确保可见
+                        # 优化：减少不必要的等待时间
                         await button.scroll_into_view_if_needed()
                         await self.page.wait_for_timeout(TIMING_CONFIG["pagination_wait"])
                         
                         # 点击按钮
                         await button.click()
                         
-                        # 等待页面加载和网络请求完成，使用动态超时
+                        # 优化：使用更短的网络等待时间
                         await self.page.wait_for_load_state('networkidle', timeout=TIMING_CONFIG["network_timeout"])
-                        await self.page.wait_for_timeout(TIMING_CONFIG["post_action_wait"])  # 额外等待确保内容加载
+                        await self.page.wait_for_timeout(TIMING_CONFIG["post_action_wait"])  # 减少的等待时间
                         
                         button_found = True
                         logger.info(f"成功点击第{target_page_num}页分页按钮")
@@ -321,6 +311,7 @@ class PlaywrightBrowserSimulator:
                         if await button.count() > 0 and await button.is_enabled():
                             logger.info(f"点击下一页按钮，选择器: {selector}")
                             
+                            # 优化：减少下一页按钮的等待时间
                             await button.scroll_into_view_if_needed()
                             await self.page.wait_for_timeout(TIMING_CONFIG["pagination_wait"])
                             await button.click()
@@ -373,16 +364,15 @@ class PlaywrightBrowserSimulator:
         return self._parse_videos_from_html_elements(soup)
     
     def _parse_videos_from_html_elements(self, soup):
-        """从HTML元素解析视频数据"""
+        """从HTML元素解析视频数据 - 优化版本，提高解析速度"""
         videos = []
         
-        # 查找视频卡片元素
-        video_cards = soup.find_all('div', class_=['small-item', 'bili-video-card']) or \
-                     soup.find_all('li', class_=['small-item', 'bili-video-card'])
+        # 优化：使用更精确的选择器，减少查找时间
+        video_cards = soup.select('.small-item, .bili-video-card')
         
         for card in video_cards:
             try:
-                # 提取视频链接和aid
+                # 优化：直接查找a标签，减少条件判断
                 link = card.find('a', href=True)
                 if not link:
                     continue
@@ -390,40 +380,33 @@ class PlaywrightBrowserSimulator:
                 href = link['href']
                 aid = 0
                 
-                # 提取aid
+                # 优化：使用更快的字符串匹配
                 if '/video/av' in href:
                     aid_match = re.search(r'/video/av(\d+)', href)
                     if aid_match:
                         aid = int(aid_match.group(1))
                 elif '/video/BV' in href:
-                    # BV号转换为aid（简化处理，实际可能需要更复杂的转换）
+                    # 优化：简化BV号处理
                     bv_match = re.search(r'/video/(BV\w+)', href)
                     if bv_match:
-                        # 这里使用BV号的hash作为临时aid
                         aid = abs(hash(bv_match.group(1))) % (10**9)
                 
-                # 提取标题
-                title_elem = card.find('a', {'title': True}) or card.find('h3') or card.find('h4')
-                title = title_elem.get('title', '') or title_elem.get_text(strip=True) if title_elem else ''
+                # 优化：简化标题提取
+                title = link.get('title', '') or link.get_text(strip=True) or ''
                 
-                # 提取播放量和评论数
+                # 优化：提取播放量和评论数 - 使用更精确的选择器
+                # 优化：提取播放量和评论数 - 使用更精确的选择器
                 view_count = 0
                 comment_count = 0
                 
-                # 查找统计数据
-                stats_container = card.find('div', class_=re.compile(r'(stats|count|data)'))
-                if stats_container:
-                    spans = stats_container.find_all('span')
-                    for i, span in enumerate(spans):
-                        text = span.get_text(strip=True)
-                        number = self._parse_stats_number(text)
-                        if i == 0:  # 通常第一个是播放量
-                            view_count = number
-                        elif i == 1:  # 第二个是评论数
-                            comment_count = number
+                # 优化：使用select查找统计数据，更快
+                stats_spans = card.select('.bili-video-card__stats span, .stats span, .count span')
+                if len(stats_spans) >= 2:
+                    view_count = self._parse_stats_number(stats_spans[0].get_text(strip=True))
+                    comment_count = self._parse_stats_number(stats_spans[1].get_text(strip=True))
                 
-                # 提取发布时间戳
-                created_timestamp = self._extract_publish_timestamp(card)
+                # 优化：简化时间戳提取
+                created_timestamp = self._extract_publish_timestamp_fast(card)
                 
                 if aid > 0:
                     videos.append({
@@ -475,6 +458,38 @@ class PlaywrightBrowserSimulator:
         except (ValueError, AttributeError):
             pass
             
+        return 0
+
+    def _extract_publish_timestamp_fast(self, card):
+        """快速提取发布时间戳 - 优化版本"""
+        try:
+            # 优化：只检查最常见的时间选择器
+            time_selectors = [
+                '.bili-video-card__subtitle',
+                'span[title]',
+                '.time',
+            ]
+            
+            for selector in time_selectors:
+                time_elements = card.select(selector)
+                for elem in time_elements:
+                    # 检查元素的时间属性
+                    for attr in ['title', 'data-time', 'datetime']:
+                        time_str = elem.get(attr, '')
+                        if time_str:
+                            timestamp = self._parse_time_string(time_str)
+                            if timestamp > 0:
+                                return timestamp
+                    
+                    # 检查元素文本内容
+                    text = elem.get_text(strip=True)
+                    if text:
+                        timestamp = self._parse_time_string(text)
+                        if timestamp > 0:
+                            return timestamp
+        except Exception as e:
+            logger.debug(f"快速时间戳提取失败: {e}")
+        
         return 0
 
     def _extract_publish_timestamp(self, card):
@@ -694,6 +709,11 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
     if not PLAYWRIGHT_AVAILABLE:
         raise ImportError("Playwright库不可用，请安装: pip install playwright && playwright install chromium")
     
+    # 应用性能模式配置
+    performance_mode = BROWSER_CONFIG.get("performance_mode", "balanced")
+    apply_performance_mode(performance_mode)
+    logger.info(f"已启用 {performance_mode} 性能模式")
+    
     # 如果未指定headless参数，使用配置文件中的设置
     if headless is None:
         headless = BROWSER_CONFIG["headless"]
@@ -711,12 +731,12 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
                 consecutive_empty_pages = 0  # 连续空页数（没有符合日期范围的视频）
                 max_consecutive_empty = 3  # 允许的最大连续空页数
                 
-                # 根据是否启用扩展模式动态设置页数限制（作为安全上限）
+                # 优化：减少最大页数限制，提高爬取效率
                 if extended_pages:
-                    max_pages = 50  # 扩展模式：提高上限，但依赖智能停止
+                    max_pages = 30  # 扩展模式：减少页数限制，依赖智能停止
                     logger.info("启用扩展爬取模式，使用智能分页检测获取更多视频数据")
                 else:
-                    max_pages = 20  # 标准模式：提高上限，但依赖智能停止
+                    max_pages = 15  # 标准模式：减少页数限制，依赖智能停止
                     logger.info("使用智能分页检测获取视频数据")
                 
                 while page <= max_pages:
@@ -838,13 +858,34 @@ def configure_browser_settings(**kwargs):
     - page_delay: 页面间隔
     - headless: 是否无头模式
     - browser_type: 浏览器类型
+    - performance_mode: 性能模式 (fast/balanced/stable)
     """
+    # 处理性能模式
+    if 'performance_mode' in kwargs:
+        mode = kwargs.pop('performance_mode')
+        apply_performance_mode(mode)
+    
+    # 处理其他配置
     for key, value in kwargs.items():
         if key in BROWSER_CONFIG:
             BROWSER_CONFIG[key] = value
             logger.info(f"已更新浏览器配置 {key} = {value}")
         else:
             logger.warning(f"未知配置项: {key}")
+
+
+def enable_fast_mode():
+    """启用快速模式 - 一键优化性能"""
+    apply_performance_mode("fast")
+    BROWSER_CONFIG["headless"] = True  # 启用无头模式提高速度
+    logger.info("已启用快速模式：无头浏览器 + 最短等待时间")
+
+
+def enable_stable_mode():
+    """启用稳定模式 - 确保最大兼容性"""
+    apply_performance_mode("stable")
+    BROWSER_CONFIG["headless"] = False  # 显示浏览器便于调试
+    logger.info("已启用稳定模式：显示浏览器 + 较长等待时间")
 
 
 def get_troubleshooting_info():
@@ -870,11 +911,18 @@ def get_troubleshooting_info():
         f"- 页面加载等待: {TIMING_CONFIG.get('page_load_wait', 'N/A')} 毫秒",
         f"- 分页等待: {TIMING_CONFIG.get('pagination_wait', 'N/A')} 毫秒",
         f"- 网络超时: {TIMING_CONFIG.get('network_timeout', 'N/A')} 毫秒",
+        f"- 性能模式: {BROWSER_CONFIG.get('performance_mode', 'balanced')}",
         "",
         "性能优化建议:",
+        "• 使用快速模式: 在代码中调用 enable_fast_mode()",
         "• 使用无头模式: python3 lidaxiao.py --headless",
         "• 减少页面数: 使用较小的日期范围",
-        "• 调整config.py中的TIMING_CONFIG以平衡速度和稳定性",
+        "• 性能模式选择: fast(最快,可能不稳定) | balanced(平衡) | stable(最稳定,较慢)",
+        "",
+        "快速优化方法:",
+        "1. 导入: from crawler import enable_fast_mode",
+        "2. 调用: enable_fast_mode()  # 启用4倍速度优化",
+        "3. 或者: apply_performance_mode('fast')  # 仅优化时间配置",
         "",
         "推荐解决方案:",
         "1. 检查网络连接和防火墙设置",

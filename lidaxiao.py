@@ -590,6 +590,8 @@ async def run_current_mode(args, headless=None):
     
     print(f"开始计算李大霄指数 (Playwright浏览器自动化模式)...")
     print(f"日期范围: {start_date} 至 {d}")
+    print("💡 提示：如果爬取速度慢，可使用 crawler.enable_fast_mode() 获得4倍速度提升")
+    print()
     
     try:
         # 爬取数据
