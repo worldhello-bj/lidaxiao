@@ -15,7 +15,7 @@ import asyncio
 import logging
 import time
 import re
-from config import BROWSER_CONFIG, ERROR_MESSAGES, TIMING_CONFIG
+from config import BROWSER_CONFIG, ERROR_MESSAGES
 
 try:
     from bs4 import BeautifulSoup
@@ -34,6 +34,9 @@ except ImportError:
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+
 
 
 class PlaywrightBrowserSimulator:
@@ -138,8 +141,8 @@ class PlaywrightBrowserSimulator:
             url = f"https://space.bilibili.com/{uid}/video?tid=0&keyword=&order=pubdate"
             
             try:
-                # 导航到页面，使用动态超时
-                await self.page.goto(url, wait_until='networkidle', timeout=TIMING_CONFIG["network_timeout"] * 2)
+                # 导航到页面
+                await self.page.goto(url, wait_until='networkidle', timeout=30000)
             except Exception as e:
                 logger.error(f"Playwright导航到页面失败: {e}")
                 raise
@@ -155,8 +158,8 @@ class PlaywrightBrowserSimulator:
                 raise
         
         try:
-            # 等待视频列表加载，使用动态超时
-            await self.page.wait_for_selector('.small-item, .bili-video-card', timeout=TIMING_CONFIG["element_timeout"])
+            # 等待视频列表加载
+            await self.page.wait_for_selector('.small-item, .bili-video-card', timeout=15000)
             
             # 滚动页面以触发懒加载
             await self.page.evaluate("""
@@ -178,8 +181,8 @@ class PlaywrightBrowserSimulator:
                 }
             """)
             
-            # 等待一段时间让内容完全加载，使用动态等待时间
-            await self.page.wait_for_timeout(TIMING_CONFIG["page_load_wait"])
+            # 等待一段时间让内容完全加载
+            await self.page.wait_for_timeout(2000)
             
             # 获取页面内容
             content = await self.page.content()
@@ -268,8 +271,8 @@ class PlaywrightBrowserSimulator:
     async def navigate_to_next_page(self, target_page_num):
         """通过点击分页按钮导航到目标页面"""
         try:
-            # 等待分页区域加载，使用动态超时
-            await self.page.wait_for_selector('.vui_pagenation, .page-wrap, .bili-pager', timeout=TIMING_CONFIG["element_timeout"])
+            # 等待分页区域加载
+            await self.page.wait_for_selector('.vui_pagenation, .page-wrap, .bili-pager', timeout=10000)
             
             # 尝试多种分页按钮选择器
             pagination_selectors = [
@@ -289,14 +292,14 @@ class PlaywrightBrowserSimulator:
                         
                         # 滚动到按钮位置确保可见
                         await button.scroll_into_view_if_needed()
-                        await self.page.wait_for_timeout(TIMING_CONFIG["pagination_wait"])
+                        await self.page.wait_for_timeout(1000)
                         
                         # 点击按钮
                         await button.click()
                         
-                        # 等待页面加载和网络请求完成，使用动态超时
-                        await self.page.wait_for_load_state('networkidle', timeout=TIMING_CONFIG["network_timeout"])
-                        await self.page.wait_for_timeout(TIMING_CONFIG["post_action_wait"])  # 额外等待确保内容加载
+                        # 等待页面加载和网络请求完成
+                        await self.page.wait_for_load_state('networkidle', timeout=15000)
+                        await self.page.wait_for_timeout(2000)  # 额外等待确保内容加载
                         
                         button_found = True
                         logger.info(f"成功点击第{target_page_num}页分页按钮")
@@ -322,11 +325,11 @@ class PlaywrightBrowserSimulator:
                             logger.info(f"点击下一页按钮，选择器: {selector}")
                             
                             await button.scroll_into_view_if_needed()
-                            await self.page.wait_for_timeout(TIMING_CONFIG["pagination_wait"])
+                            await self.page.wait_for_timeout(1000)
                             await button.click()
                             
-                            await self.page.wait_for_load_state('networkidle', timeout=TIMING_CONFIG["network_timeout"])
-                            await self.page.wait_for_timeout(TIMING_CONFIG["post_action_wait"])
+                            await self.page.wait_for_load_state('networkidle', timeout=15000)
+                            await self.page.wait_for_timeout(2000)
                             
                             button_found = True
                             logger.info(f"成功点击下一页按钮")
@@ -784,8 +787,8 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
                         consecutive_failures = 0
                         page += 1
                         
-                        # 添加页面间隔，避免被检测为爬虫 - 使用动态时间配置
-                        await asyncio.sleep(random.uniform(TIMING_CONFIG["page_interval_min"], TIMING_CONFIG["page_interval_max"]))
+                        # 添加页面间隔，避免被检测为爬虫
+                        await asyncio.sleep(random.uniform(3, 6))  # 页面间延迟
                         
                     except Exception as e:
                         consecutive_failures += 1
@@ -798,7 +801,7 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
                         
                         # 否则继续下一页
                         page += 1
-                        await asyncio.sleep(random.uniform(TIMING_CONFIG["failure_wait_min"], TIMING_CONFIG["failure_wait_max"]))
+                        await asyncio.sleep(random.uniform(2, 4))  # 失败后稍微等待
                 
                 
                 if all_videos:
@@ -815,8 +818,7 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
             logger.warning(f"第 {attempt + 1} 次尝试失败: {error_msg}")
             
             if attempt < BROWSER_CONFIG["retry_attempts"] - 1:
-                # 使用动态重试延迟
-                delay = BROWSER_CONFIG["retry_delay"] * (1.5 ** attempt)
+                delay = BROWSER_CONFIG["retry_delay"] * (2 ** attempt)
                 logger.info(f"将在 {delay} 秒后重试...")
                 await asyncio.sleep(delay)
             else:
@@ -866,20 +868,10 @@ def get_troubleshooting_info():
         f"- 无头模式: {BROWSER_CONFIG.get('headless', 'N/A')}",
         f"- 浏览器类型: {BROWSER_CONFIG.get('browser_type', 'N/A')}",
         "",
-        "时间配置:",
-        f"- 页面加载等待: {TIMING_CONFIG.get('page_load_wait', 'N/A')} 毫秒",
-        f"- 分页等待: {TIMING_CONFIG.get('pagination_wait', 'N/A')} 毫秒",
-        f"- 网络超时: {TIMING_CONFIG.get('network_timeout', 'N/A')} 毫秒",
-        "",
-        "性能优化建议:",
-        "• 使用无头模式: python3 lidaxiao.py --headless",
-        "• 减少页面数: 使用较小的日期范围",
-        "• 调整config.py中的TIMING_CONFIG以平衡速度和稳定性",
-        "",
         "推荐解决方案:",
         "1. 检查网络连接和防火墙设置",
         "2. 确保Playwright已正确安装: pip install playwright && playwright install chromium",
-        "3. 根据需要调整config.py中的时间配置",
+        "3. 尝试无头模式: python3 lidaxiao.py --headless",
         "4. 运行demo.py查看演示功能",
     ]
     return "\n".join(info)
