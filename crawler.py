@@ -572,7 +572,8 @@ class PlaywrightBrowserSimulator:
         logger.info("🔍 开始从HTML元素解析视频数据")
         
         # 优化：使用更精确的选择器，减少查找时间
-        video_cards = soup.select('.small-item, .bili-video-card')
+        # 首先尝试用户提供的具体选择器模式
+        video_cards = soup.select('.bili-video-card, .small-item, .video-item')
         logger.info(f"📄 找到 {len(video_cards)} 个视频卡片元素")
         
         # 性能优化：批量处理，减少单个视频的日志开销
@@ -601,22 +602,44 @@ class PlaywrightBrowserSimulator:
                     if bv_match:
                         aid = abs(hash(bv_match.group(1))) % (10**9)
                 
-                # 优化：简化标题提取
-                title = link.get('title', '') or link.get_text(strip=True) or ''
+                # 优化：简化标题提取 - 支持用户提供的具体选择器
+                title = ''
+                # 首先尝试用户提供的标题选择器模式（img元素的title/alt属性）
+                title_img = card.select_one('div.bili-cover-card__thumbnail img, .cover img, img[alt]')
+                if title_img:
+                    title = title_img.get('title', '') or title_img.get('alt', '') or title_img.get_text(strip=True)
                 
-                # 优化：提取播放量和评论数 - 使用更精确的选择器
+                # 如果没找到，回退到原有方法
+                if not title:
+                    title = link.get('title', '') or link.get_text(strip=True) or ''
+                
+                # 优化：提取播放量和评论数 - 使用用户提供的具体选择器
                 view_count = 0
                 comment_count = 0
                 
-                # 优化：使用select查找统计数据，更快
-                stats_spans = card.select('.bili-video-card__stats span, .stats span, .count span')
-                
-                if len(stats_spans) >= 2:
-                    view_text = stats_spans[0].get_text(strip=True)
-                    comment_text = stats_spans[1].get_text(strip=True)
-                    
+                # 首先尝试用户提供的具体播放量选择器
+                view_span = card.select_one('div.bili-cover-card__stats div:nth-child(1) span, .bili-video-card__stats div:nth-child(1) span')
+                if view_span:
+                    view_text = view_span.get_text(strip=True)
                     view_count = self._parse_stats_number(view_text)
-                    comment_count = self._parse_stats_number(comment_text)
+                
+                # 如果没找到，回退到原有选择器
+                if view_count == 0:
+                    stats_spans = card.select('.bili-video-card__stats span, .stats span, .count span')
+                    
+                    if len(stats_spans) >= 2:
+                        view_text = stats_spans[0].get_text(strip=True)
+                        comment_text = stats_spans[1].get_text(strip=True)
+                        
+                        view_count = self._parse_stats_number(view_text)
+                        comment_count = self._parse_stats_number(comment_text)
+                
+                # 尝试获取评论数（如果还没有）
+                if comment_count == 0:
+                    comment_span = card.select_one('div.bili-cover-card__stats div:nth-child(2) span, .bili-video-card__stats div:nth-child(2) span')
+                    if comment_span:
+                        comment_text = comment_span.get_text(strip=True)
+                        comment_count = self._parse_stats_number(comment_text)
                 
                 # 修复：如果无法从统计元素提取到播放量，尝试从标题提取
                 if view_count == 0:
