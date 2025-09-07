@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 李大霄指数计算程序 (使用Playwright浏览器自动化)
@@ -15,11 +15,12 @@ import asyncio
 import argparse
 
 from config import BILIBILI_UID, DEFAULT_DAYS_RANGE
-from crawler import fetch_videos, get_troubleshooting_info
+from crawler import fetch_videos, get_troubleshooting_info,enable_debug_logging
 from calculator import calculate_index
 from storage import save_all_data, load_history_data
 from visualizer import generate_all_charts, generate_historical_charts
 from historical import calculate_historical_index, calculate_batch_historical, HistoricalCalculator
+
 
 
 def calculate_effective_target_date(target_date):
@@ -199,6 +200,7 @@ def validate_video_data_sufficiency(videos, args):
 
 async def main():
     # 解析命令行参数
+    enable_debug_logging()
     parser = argparse.ArgumentParser(description='李大霄指数计算程序 (使用Playwright浏览器自动化)')
     parser.add_argument('--headless', action='store_true', default=None,
                        help='强制使用无头模式 (后台运行浏览器，用于服务器环境)')

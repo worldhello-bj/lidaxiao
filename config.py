@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 配置模块
@@ -56,15 +56,15 @@ TIMING_CONFIG = {
 
 # 调试配置
 DEBUG_CONFIG = {
-    "enabled": False,                    # 是否启用调试模式
+    "enabled": True,                    # 是否启用调试模式
     "log_page_states": True,            # 记录页面状态信息
-    "log_dom_snapshots": False,         # 记录DOM快照（较大，谨慎开启）
+    "log_dom_snapshots": True,         # 记录DOM快照（较大，谨慎开启）
     "log_selectors": True,              # 记录选择器查找详情
     "log_video_parsing": True,          # 记录视频数据解析过程
     "log_configuration": True,          # 记录配置参数变化
     "log_retries": True,                # 记录重试过程详情
     "log_pagination": True,             # 记录分页操作详情
-    "max_dom_snapshot_length": 1000,    # DOM快照最大长度
+    "max_dom_snapshot_length": 10000,    # DOM快照最大长度
 }
 
 # 错误消息配置
