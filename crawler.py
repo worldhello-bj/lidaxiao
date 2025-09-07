@@ -345,7 +345,7 @@ class PlaywrightBrowserSimulator:
             logger.debug(f"🔍 查找当前页指示器，尝试选择器: {current_page_selectors}")
             for selector in current_page_selectors:
                 try:
-                    element = await self.page.locator(selector).first.text_content()
+                    element = await self.page.locator(selector).first.text_content(timeout=TIMING_CONFIG["element_timeout"])
                     if element and element.isdigit():
                         current_page = int(element)
                         logger.debug(f"✅ 找到当前页: {current_page}，选择器: {selector}")
@@ -366,7 +366,7 @@ class PlaywrightBrowserSimulator:
             for selector in next_button_selectors:
                 try:
                     button = self.page.locator(selector).first
-                    if await button.count() > 0 and await button.is_enabled():
+                    if await button.count() > 0 and await button.is_enabled(timeout=TIMING_CONFIG["element_timeout"]):
                         has_next = True
                         logger.debug(f"✅ 找到可用的下一页按钮，选择器: {selector}")
                         break
@@ -384,7 +384,7 @@ class PlaywrightBrowserSimulator:
             logger.debug(f"🔍 查找总页数，尝试选择器: {total_page_selectors}")
             for selector in total_page_selectors:
                 try:
-                    element = await self.page.locator(selector).text_content()
+                    element = await self.page.locator(selector).text_content(timeout=TIMING_CONFIG["element_timeout"])
                     if element and element.isdigit():
                         total_pages = max(total_pages, int(element))
                         logger.debug(f"✅ 找到总页数: {total_pages}，选择器: {selector}")
@@ -482,7 +482,7 @@ class PlaywrightBrowserSimulator:
                     try:
                         button = self.page.locator(selector).first
                         button_count = await button.count()
-                        is_enabled = await button.is_enabled() if button_count > 0 else False
+                        is_enabled = await button.is_enabled(timeout=TIMING_CONFIG["element_timeout"]) if button_count > 0 else False
                         
                         log_selector_search(selector, button_count, "下一页按钮查找")
                         logger.debug(f"🔍 下一页按钮状态 - 数量: {button_count}, 可用: {is_enabled}")
