@@ -572,8 +572,25 @@ class PlaywrightBrowserSimulator:
         logger.info("🔍 开始从HTML元素解析视频数据")
         
         # 优化：使用更精确的选择器，减少查找时间
-        video_cards = soup.select('.small-item, .bili-video-card')
-        logger.info(f"📄 找到 {len(video_cards)} 个视频卡片元素")
+        # 首先尝试用户提供的具体选择器模式 - 在指定容器内查找视频卡片
+        # 用户提供的具体容器选择器：#app > main > div.space-upload > div.upload-content > div > div.video-body > div > div:nth-child(6)
+        video_cards = []
+        
+        # 首先尝试在用户指定的容器内查找视频卡片
+        specific_container = soup.select('div.video-body div:nth-child(6)')
+        if specific_container:
+            logger.info(f"🎯 在用户指定的容器内查找视频卡片")
+            for container in specific_container:
+                cards_in_container = container.select('.bili-video-card, .small-item, .video-item')
+                video_cards.extend(cards_in_container)
+                logger.info(f"📄 在容器内找到 {len(cards_in_container)} 个视频卡片")
+        
+        # 如果没找到，回退到原有的全局搜索
+        if not video_cards:
+            logger.info("🔍 在指定容器内未找到视频卡片，回退到全局搜索")
+            video_cards = soup.select('.bili-video-card, .small-item, .video-item')
+        
+        logger.info(f"📄 总共找到 {len(video_cards)} 个视频卡片元素")
         
         # 性能优化：批量处理，减少单个视频的日志开销
         parsed_count = 0
@@ -601,25 +618,88 @@ class PlaywrightBrowserSimulator:
                     if bv_match:
                         aid = abs(hash(bv_match.group(1))) % (10**9)
                 
-                # 优化：简化标题提取
-                title = link.get('title', '') or link.get_text(strip=True) or ''
+                # 优化：简化标题提取 - 支持用户提供的具体选择器
+                title = ''
+                # 首先尝试用户提供的标题选择器模式（img元素的title/alt属性）
+                title_img = card.select_one('div.bili-cover-card__thumbnail img, .cover img, img[alt]')
+                if title_img:
+                    title = title_img.get('title', '') or title_img.get('alt', '') or title_img.get_text(strip=True)
                 
-                # 优化：提取播放量和评论数 - 使用更精确的选择器
+                # 如果没找到，回退到原有方法
+                if not title:
+                    title = link.get('title', '') or link.get_text(strip=True) or ''
+                
+                # 优化：提取播放量和评论数 - 使用用户提供的具体选择器
                 view_count = 0
                 comment_count = 0
                 
-                # 优化：使用select查找统计数据，更快
-                stats_spans = card.select('.bili-video-card__stats span, .stats span, .count span')
-                
-                if len(stats_spans) >= 2:
-                    view_text = stats_spans[0].get_text(strip=True)
-                    comment_text = stats_spans[1].get_text(strip=True)
-                    
+                # 首先尝试用户提供的具体播放量选择器（在视频卡片内查找）
+                view_span = card.select_one('div.bili-cover-card__stats div:nth-child(1) span, .bili-video-card__stats div:nth-child(1) span')
+                if view_span:
+                    view_text = view_span.get_text(strip=True)
                     view_count = self._parse_stats_number(view_text)
-                    comment_count = self._parse_stats_number(comment_text)
+                    logger.debug(f"🔍 从stats选择器提取播放量: {view_text} -> {view_count}")
+                
+                # 如果没找到，尝试其他可能的播放量选择器
+                if view_count == 0:
+                    # 尝试查找其他可能的播放量位置
+                    play_selectors = [
+                        'span:contains("播放")', 
+                        '.play-count',
+                        '.view-count', 
+                        '[data-v-view]',
+                        'span[title*="播放"]'
+                    ]
+                    
+                    for selector in play_selectors:
+                        try:
+                            play_elem = card.select_one(selector)
+                            if play_elem:
+                                play_text = play_elem.get_text(strip=True)
+                                temp_count = self._parse_stats_number(play_text)
+                                if temp_count > 0:
+                                    view_count = temp_count
+                                    logger.debug(f"🔍 从{selector}提取播放量: {play_text} -> {view_count}")
+                                    break
+                        except Exception:
+                            continue
+                
+                # 如果仍然没找到，回退到原有的通用选择器
+                if view_count == 0:
+                    stats_spans = card.select('.bili-video-card__stats span, .stats span, .count span')
+                    
+                    if len(stats_spans) >= 2:
+                        view_text = stats_spans[0].get_text(strip=True)
+                        comment_text = stats_spans[1].get_text(strip=True)
+                        
+                        view_count = self._parse_stats_number(view_text)
+                        comment_count = self._parse_stats_number(comment_text)
+                        logger.debug(f"🔍 从通用stats选择器提取: 播放={view_count}, 评论={comment_count}")
+                
+                # 尝试获取评论数（如果还没有）
+                if comment_count == 0:
+                    comment_span = card.select_one('div.bili-cover-card__stats div:nth-child(2) span, .bili-video-card__stats div:nth-child(2) span')
+                    if comment_span:
+                        comment_text = comment_span.get_text(strip=True)
+                        comment_count = self._parse_stats_number(comment_text)
+                        logger.debug(f"🔍 从评论选择器提取评论数: {comment_text} -> {comment_count}")
+                
+                # 修复：如果无法从统计元素提取到播放量，尝试从标题提取
+                if view_count == 0:
+                    view_count = self._extract_view_count_from_title(title)
                 
                 # 超级优化：简化时间戳提取，解决5分钟性能问题
+                # 在用户指定的视频卡片容器内查找发布日期
                 created_timestamp = self._extract_publish_timestamp_fast(card)
+                
+                # 在调试模式下记录提取到的数据
+                if DEBUG_CONFIG.get("enabled", False) and DEBUG_CONFIG.get("log_video_parsing", False):
+                    logger.debug(f"🎬 解析视频卡片数据:")
+                    logger.debug(f"  标题: {title[:50]}{'...' if len(title) > 50 else ''}")
+                    logger.debug(f"  AID: {aid}")
+                    logger.debug(f"  播放量: {view_count}")
+                    logger.debug(f"  评论数: {comment_count}")
+                    logger.debug(f"  时间戳: {created_timestamp}")
                 
                 if aid > 0:
                     video_data = {
@@ -637,6 +717,8 @@ class PlaywrightBrowserSimulator:
                         logger.debug(f"🎬 视频 {parsed_count}: {title[:30]}{'...' if len(title) > 30 else ''}, AID={aid}, 播放={view_count}, 评论={comment_count}")
                 else:
                     failed_count += 1
+                    if DEBUG_CONFIG.get("enabled", False):
+                        logger.debug(f"❌ 跳过无效视频卡片 (AID={aid})")
                     
             except Exception as e:
                 failed_count += 1
@@ -691,31 +773,116 @@ class PlaywrightBrowserSimulator:
             
         return 0
 
+    def _extract_view_count_from_title(self, title):
+        """从视频标题提取播放量 - 修复播放量为0的问题"""
+        if not title:
+            return 0
+        
+        # 查找标题中的播放量模式，如 "4.0万", "3.7万", "32万" 等
+        view_patterns = [
+            r'(\d+\.?\d*)万',  # X.X万 or X万
+            r'(\d+\.?\d*)千',  # X.X千 or X千  
+            r'(\d+\.?\d*)亿',  # X.X亿 or X亿
+            r'(\d+\.?\d*)百',  # X.X百 or X百
+        ]
+        
+        for pattern in view_patterns:
+            match = re.search(pattern, title)
+            if match:
+                num_str = match.group(1)
+                try:
+                    if '万' in pattern:
+                        return int(float(num_str) * 10000)
+                    elif '千' in pattern:
+                        return int(float(num_str) * 1000)
+                    elif '亿' in pattern:
+                        return int(float(num_str) * 100000000)
+                    elif '百' in pattern:
+                        return int(float(num_str) * 100)
+                except (ValueError, AttributeError):
+                    continue
+        
+        return 0
+
     def _extract_publish_timestamp_fast(self, card):
         """超级优化的时间戳提取 - 专门解决5分钟解析42个视频的性能问题"""
         try:
             # 超级优化：直接查找最常见的时间元素，避免复杂的CSS选择器
+            # 在用户指定的视频卡片容器内查找发布日期
+            
             # 优先查找带title属性的span（B站最常用的时间格式）
             spans_with_title = card.find_all('span', title=True)
             for span in spans_with_title:
                 title_text = span.get('title', '')
-                if title_text and ('2024' in title_text or '2023' in title_text or '小时前' in title_text or '分钟前' in title_text):
+                if title_text and ('2024' in title_text or '2023' in title_text or '小时前' in title_text or '分钟前' in title_text or '天前' in title_text):
                     timestamp = self._parse_time_string_ultra_fast(title_text)
                     if timestamp > 0:
+                        if DEBUG_CONFIG.get("enabled", False):
+                            logger.debug(f"🕒 从title属性提取时间戳: {title_text} -> {timestamp}")
                         return timestamp
             
-            # 快速查找包含时间文本的span
+            # 查找视频卡片内的时间相关元素
+            time_selectors = [
+                '.bili-video-card__subtitle',  # 视频卡片的副标题区域
+                '.video-time',                 # 时间类
+                '.upload-time',                # 上传时间类
+                '.pubdate',                    # 发布日期类
+                'time',                        # time标签
+                '[data-time]'                  # 带data-time属性的元素
+            ]
+            
+            for selector in time_selectors:
+                try:
+                    time_elem = card.select_one(selector)
+                    if time_elem:
+                        # 检查data-time属性
+                        data_time = time_elem.get('data-time', '')
+                        if data_time:
+                            try:
+                                timestamp = int(data_time)
+                                if DEBUG_CONFIG.get("enabled", False):
+                                    logger.debug(f"🕒 从data-time属性提取时间戳: {data_time}")
+                                return timestamp
+                            except ValueError:
+                                pass
+                        
+                        # 检查title属性
+                        title_text = time_elem.get('title', '')
+                        if title_text:
+                            timestamp = self._parse_time_string_ultra_fast(title_text)
+                            if timestamp > 0:
+                                if DEBUG_CONFIG.get("enabled", False):
+                                    logger.debug(f"🕒 从{selector}的title属性提取时间戳: {title_text} -> {timestamp}")
+                                return timestamp
+                        
+                        # 检查元素文本内容
+                        text_content = time_elem.get_text(strip=True)
+                        if text_content:
+                            timestamp = self._parse_time_string_ultra_fast(text_content)
+                            if timestamp > 0:
+                                if DEBUG_CONFIG.get("enabled", False):
+                                    logger.debug(f"🕒 从{selector}的文本内容提取时间戳: {text_content} -> {timestamp}")
+                                return timestamp
+                except Exception:
+                    continue
+            
+            # 快速查找包含时间文本的span（通用搜索）
             spans = card.find_all('span')
             for span in spans:
                 text = span.get_text(strip=True)
-                if text and ('小时前' in text or '分钟前' in text or '天前' in text or '个月前' in text):
+                if text and ('小时前' in text or '分钟前' in text or '天前' in text or '个月前' in text or '年前' in text):
                     timestamp = self._parse_time_string_ultra_fast(text)
                     if timestamp > 0:
+                        if DEBUG_CONFIG.get("enabled", False):
+                            logger.debug(f"🕒 从span文本内容提取时间戳: {text} -> {timestamp}")
                         return timestamp
                     
-        except Exception:
-            pass
+        except Exception as e:
+            if DEBUG_CONFIG.get("enabled", False):
+                logger.debug(f"❌ 时间戳提取异常: {e}")
         
+        if DEBUG_CONFIG.get("enabled", False):
+            logger.debug("🕒 无法提取时间戳，使用当前时间作为fallback")
         return int(time.time())  # 默认当前时间
 
     def _parse_time_string_ultra_fast(self, time_str):
