@@ -618,6 +618,10 @@ class PlaywrightBrowserSimulator:
                     view_count = self._parse_stats_number(view_text)
                     comment_count = self._parse_stats_number(comment_text)
                 
+                # 修复：如果无法从统计元素提取到播放量，尝试从标题提取
+                if view_count == 0:
+                    view_count = self._extract_view_count_from_title(title)
+                
                 # 超级优化：简化时间戳提取，解决5分钟性能问题
                 created_timestamp = self._extract_publish_timestamp_fast(card)
                 
@@ -689,6 +693,37 @@ class PlaywrightBrowserSimulator:
         except (ValueError, AttributeError):
             pass
             
+        return 0
+
+    def _extract_view_count_from_title(self, title):
+        """从视频标题提取播放量 - 修复播放量为0的问题"""
+        if not title:
+            return 0
+        
+        # 查找标题中的播放量模式，如 "4.0万", "3.7万", "32万" 等
+        view_patterns = [
+            r'(\d+\.?\d*)万',  # X.X万 or X万
+            r'(\d+\.?\d*)千',  # X.X千 or X千  
+            r'(\d+\.?\d*)亿',  # X.X亿 or X亿
+            r'(\d+\.?\d*)百',  # X.X百 or X百
+        ]
+        
+        for pattern in view_patterns:
+            match = re.search(pattern, title)
+            if match:
+                num_str = match.group(1)
+                try:
+                    if '万' in pattern:
+                        return int(float(num_str) * 10000)
+                    elif '千' in pattern:
+                        return int(float(num_str) * 1000)
+                    elif '亿' in pattern:
+                        return int(float(num_str) * 100000000)
+                    elif '百' in pattern:
+                        return int(float(num_str) * 100)
+                except (ValueError, AttributeError):
+                    continue
+        
         return 0
 
     def _extract_publish_timestamp_fast(self, card):
