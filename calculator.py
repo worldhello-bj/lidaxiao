@@ -24,7 +24,7 @@ def calculate_index(videos):
     return total  # 无视频时自动返回0.0
 
 
-def calculate_video_contribution(video):
+def calc_contribution(video):
     """
     计算单个视频的指数贡献
     :param video: 单个视频数据
@@ -43,7 +43,7 @@ def get_video_details(videos):
     """
     detailed_videos = []
     for video in videos:
-        contribution = calculate_video_contribution(video)
+        contribution = calc_contribution(video)
         detailed_videos.append({
             **video,
             "contribution": contribution

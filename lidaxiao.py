@@ -19,7 +19,7 @@ from crawler import fetch_videos, get_troubleshooting,enable_debug
 from calculator import calculate_index
 from storage import save_all_data, load_history_data
 from visualizer import generate_all_charts, generate_historical_charts
-from historical import calculate_historical_index, calculate_batch_historical, HistoricalCalculator
+from historical import calc_historical_index, calc_batch_historical, HistoricalCalculator
 
 
 
@@ -339,7 +339,7 @@ async def calc_single_date(videos, args, current_date, current_index):
     print(f"李大霄指数计算规则: 基于 {effective_date.strftime('%Y-%m-%d')} (往回倒6天) 的数据")
     
     try:
-        historical_index = calculate_historical_index(
+        historical_index = calc_historical_index(
             videos, target_date, current_date
         )
         
@@ -403,7 +403,7 @@ async def calc_batch_dates(videos, args, current_date, current_index):
         calculator = HistoricalCalculator()
         date_list = calculator.generate_date_range(start_date, end_date)
         
-        results = calculate_batch_historical(
+        results = calc_batch_historical(
             videos, date_list, current_date
         )
         
@@ -502,7 +502,7 @@ async def calc_default_range(videos, args, current_date, current_index):
             raw_end_date.strftime("%Y-%m-%d")
         )
         
-        results = calculate_batch_historical(
+        results = calc_batch_historical(
             videos, date_list, current_date
         )
         

@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 def enable_debug():
-    """启用调试日志模式"""
+    """启用调试模式"""
     DEBUG_CONFIG["enabled"] = True
     # 设置日志级别为DEBUG
     logging.getLogger().setLevel(logging.DEBUG)
@@ -48,7 +48,7 @@ def enable_debug():
 
 
 def log_config():
-    """记录当前配置状态"""
+    """记录配置状态"""
     if not DEBUG_CONFIG.get("log_configuration", False):
         return
         
@@ -59,7 +59,7 @@ def log_config():
 
 
 def log_page(page, operation="未知操作"):
-    """记录页面状态信息"""
+    """记录页面状态"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_page_states", False):
         return
         
@@ -72,7 +72,7 @@ def log_page(page, operation="未知操作"):
 
 
 async def log_dom(page, operation="未知操作"):
-    """记录DOM快照信息"""
+    """记录DOM快照"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_dom_snapshots", False):
         return
         
@@ -89,7 +89,7 @@ async def log_dom(page, operation="未知操作"):
 
 
 def log_selector(selector, elements_found, operation="选择器查找"):
-    """记录选择器查找详情"""
+    """记录选择器查找"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_selectors", False):
         return
         
@@ -99,7 +99,7 @@ def log_selector(selector, elements_found, operation="选择器查找"):
 
 
 def log_video_parsing(videos, operation="视频解析"):
-    """记录视频数据解析详情"""
+    """记录视频解析"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_video_parsing", False):
         return
         
@@ -118,7 +118,7 @@ def log_video_parsing(videos, operation="视频解析"):
 
 
 def log_retry(attempt, max_attempts, error, delay=None):
-    """记录重试尝试详情"""
+    """记录重试详情"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_retries", False):
         return
         
@@ -131,7 +131,7 @@ def log_retry(attempt, max_attempts, error, delay=None):
 
 
 def log_pagination(page_num, total_pages=None, has_next=None):
-    """记录分页操作详情"""
+    """记录分页信息"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_pagination", False):
         return
         
@@ -144,7 +144,7 @@ def log_pagination(page_num, total_pages=None, has_next=None):
 
 
 def log_exception(operation, exception, context=None):
-    """记录异常和上下文信息"""
+    """记录异常信息"""
     logger.error(f"❌ 操作失败: {operation}")
     logger.error(f"  异常类型: {type(exception).__name__}")
     logger.error(f"  异常信息: {str(exception)}")
@@ -573,7 +573,7 @@ class PlaywrightBrowserSimulator:
         return videos
     
     def _validate_page(self, soup):
-        """验证页面结构是否包含预期的video card容器"""
+        """验证页面结构"""
         # 检查是否存在常见的视频列表容器
         common_containers = [
             '.video-body', '.video-list', '.bili-video-list', 
@@ -592,7 +592,7 @@ class PlaywrightBrowserSimulator:
             logger.warning("⚠️  页面结构异常: 未找到常见的视频容器，可能页面结构发生变化")
     
     def _validate_extraction(self, soup, extracted_videos):
-        """验证视频提取的完整性，确保没有遗漏"""
+        """验证提取完整性"""
         # 统计页面中所有可能的视频链接
         all_video_links = soup.select('a[href*="/video/av"], a[href*="/video/BV"]')
         
@@ -626,7 +626,7 @@ class PlaywrightBrowserSimulator:
             logger.debug("🔍 页面中未找到视频链接，可能为空页面或结构异常")
     
     def _parse_video_elements(self, soup):
-        """从HTML元素解析视频数据 - 性能优化版本"""
+        """解析视频数据"""
         videos = []
         logger.info("🔍 开始从HTML元素解析视频数据")
         
@@ -930,7 +930,7 @@ class PlaywrightBrowserSimulator:
         return 0
 
     def _extract_view_count(self, title):
-        """从视频标题提取播放量"""
+        """提取播放量"""
         if not title:
             return 0
         
@@ -961,7 +961,7 @@ class PlaywrightBrowserSimulator:
         return 0
 
     def _extract_timestamp(self, card):
-        """优化的时间戳提取"""
+        """提取时间戳"""
         try:
             # 超级优化：直接查找最常见的时间元素，避免复杂的CSS选择器
             # 在用户指定的视频卡片容器内查找发布日期
@@ -1042,7 +1042,7 @@ class PlaywrightBrowserSimulator:
         return int(time.time())  # 默认当前时间
 
     def _parse_time_fast(self, time_str):
-        """优化的时间字符串解析"""
+        """解析时间字符串"""
         try:
             time_str = time_str.strip()
             current_time = datetime.datetime.now()
@@ -1307,20 +1307,9 @@ def configure_browser(**kwargs):
     
     可用参数:
     - timeout: 超时时间
-    - retry_attempts: 重试次数
-    - retry_delay: 重试延迟
-    - page_delay: 页面间隔
+    - retry_attempts: 重试次数  
     - headless: 是否无头模式
     - browser_type: 浏览器类型
-    
-    时间配置参数:
-    - page_load_wait: 页面加载等待时间(毫秒)
-    - pagination_wait: 分页点击等待时间(毫秒)
-    - post_action_wait: 操作后等待时间(毫秒)
-    - page_interval_min: 页面间最小间隔(秒)
-    - page_interval_max: 页面间最大间隔(秒)
-    - network_timeout: 网络超时(毫秒)
-    - element_timeout: 元素等待超时(毫秒)
     """
     global TIMING_CONFIG
     
@@ -1347,7 +1336,7 @@ def configure_browser(**kwargs):
 
 
 def enable_fast_mode():
-    """启用快速模式 - 一键优化性能"""
+    """启用快速模式"""
     logger.debug("⚡ 启用快速模式，更新配置...")
     
     old_timing = TIMING_CONFIG.copy()
@@ -1376,7 +1365,7 @@ def enable_fast_mode():
 
 
 def enable_stable_mode():
-    """启用稳定模式 - 确保最大兼容性"""
+    """启用稳定模式"""
     logger.debug("🛡️ 启用稳定模式，更新配置...")
     
     old_timing = TIMING_CONFIG.copy()
@@ -1405,9 +1394,7 @@ def enable_stable_mode():
 
 
 def get_troubleshooting():
-    """
-    返回故障排除信息
-    """
+    """返回故障排除信息"""
     info = [
         "=== 李大霄指数计算程序故障排除信息 ===",
         f"当前时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",

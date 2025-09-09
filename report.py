@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from config import BILIBILI_UID, DEFAULT_DAYS_RANGE
 from crawler import fetch_videos
-from calculator import calculate_index, get_video_details, calculate_video_contribution
+from calculator import calculate_index, get_video_details, calc_contribution
 from historical import HistoricalCalculator, debug_calculation_process
 
 
@@ -98,7 +98,7 @@ async def generate_detailed_report(target_date=None):
             # 显示前10个视频的详细信息
             print("前10个视频详情:")
             for i, video in enumerate(videos[:10]):
-                contribution = calculate_video_contribution(video)
+                contribution = calc_contribution(video)
                 print(f"  {i+1:2d}. {video.get('title', 'Unknown')[:40]:<40} "
                       f"播放: {video.get('view', 0):>8,} "
                       f"评论: {video.get('comment', 0):>6,} "
