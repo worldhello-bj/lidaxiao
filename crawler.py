@@ -638,27 +638,55 @@ class PlaywrightBrowserSimulator:
         # 增强：多层次视频卡片检测，确保全覆盖
         
         # 第一步：尝试用户指定的容器内查找视频卡片
-        # 基于用户反馈：#app > main > div.space-upload > div.upload-content > div > div.video-body > div > div:nth-child(1)
-        # 更新容器选择器，从第1个子元素开始查找，而不是仅查找第6个
-        container_selectors = [
-            'div.video-body > div > div',  # 直接查找video-body下的所有视频项
-            'div.video-body div:nth-child(1)',  # 用户指定的第1个视频位置
-            'div.video-body div:nth-child(2)',  # 第2个视频位置  
-            'div.video-body div:nth-child(3)',  # 第3个视频位置
-            'div.video-body div:nth-child(4)',  # 第4个视频位置
-            'div.video-body div:nth-child(5)',  # 第5个视频位置
-            'div.video-body div:nth-child(6)',  # 原有的第6个视频位置（保持兼容）
-        ]
+        # 基于用户反馈：从第一个位置开始动态搜索直到没有更多视频
+        # 动态搜索策略：从nth-child(1)开始，持续搜索直到没有更多视频卡片
         
-        for selector in container_selectors:
-            specific_containers = soup.select(selector)
+        # 首先尝试全局选择器获取所有视频
+        all_videos_selector = 'div.video-body > div > div'
+        all_containers = soup.select(all_videos_selector)
+        if all_containers:
+            logger.debug(f"🎯 使用全局选择器 '{all_videos_selector}' 找到 {len(all_containers)} 个容器")
+            for container in all_containers:
+                cards_in_container = container.select('.bili-video-card, .small-item, .video-item')
+                if cards_in_container:
+                    video_cards.extend(cards_in_container)
+                    logger.info(f"📄 在全局容器内找到 {len(cards_in_container)} 个视频卡片")
+        
+        # 如果全局选择器没找到足够的内容，使用动态nth-child搜索
+        # 从第1个位置开始搜索，直到没有更多视频为止
+        position = 1
+        max_search_positions = 50  # 设置合理的最大搜索位置限制，防止无限循环
+        
+        logger.info("🔍 开始动态nth-child位置搜索（从第1个位置开始直到没有更多视频）")
+        
+        while position <= max_search_positions:
+            nth_child_selector = f'div.video-body div:nth-child({position})'
+            specific_containers = soup.select(nth_child_selector)
+            
             if specific_containers:
-                logger.debug(f"🎯 使用容器选择器 '{selector}' 找到 {len(specific_containers)} 个容器")
+                found_videos = False
+                logger.debug(f"🎯 使用nth-child选择器 '{nth_child_selector}' 找到 {len(specific_containers)} 个容器")
+                
                 for container in specific_containers:
                     cards_in_container = container.select('.bili-video-card, .small-item, .video-item')
                     if cards_in_container:
                         video_cards.extend(cards_in_container)
-                        logger.info(f"📄 在容器 '{selector}' 内找到 {len(cards_in_container)} 个视频卡片")
+                        found_videos = True
+                        logger.debug(f"📄 在第{position}个位置找到 {len(cards_in_container)} 个视频卡片")
+                
+                if found_videos:
+                    logger.info(f"✅ 第{position}个位置成功找到视频卡片")
+                else:
+                    logger.debug(f"⚪ 第{position}个位置容器存在但无视频卡片")
+                
+                position += 1
+            else:
+                # 没有找到容器，说明已经搜索完所有位置
+                logger.info(f"🏁 搜索完成：在第{position}个位置未找到更多容器，共搜索了 {position-1} 个位置")
+                break
+        
+        if position > max_search_positions:
+            logger.warning(f"⚠️ 达到最大搜索位置限制 ({max_search_positions})，停止搜索")
         
         # 第二步：如果没找到，使用扩展的全局搜索策略
         if not video_cards:
