@@ -637,25 +637,42 @@ class PlaywrightBrowserSimulator:
         
         # 增强：多层次视频卡片检测，确保全覆盖
         
-        # 第一步：尝试用户指定的容器内查找
-        specific_container = soup.select('div.video-body div:nth-child(6)')
-        if specific_container:
-            logger.info(f"🎯 在用户指定的容器内查找视频卡片")
-            for container in specific_container:
-                cards_in_container = container.select('.bili-video-card, .small-item, .video-item')
-                video_cards.extend(cards_in_container)
-                logger.info(f"📄 在容器内找到 {len(cards_in_container)} 个视频卡片")
+        # 第一步：尝试用户指定的容器内查找视频卡片
+        # 基于用户反馈：#app > main > div.space-upload > div.upload-content > div > div.video-body > div > div:nth-child(1)
+        # 更新容器选择器，从第1个子元素开始查找，而不是仅查找第6个
+        container_selectors = [
+            'div.video-body > div > div',  # 直接查找video-body下的所有视频项
+            'div.video-body div:nth-child(1)',  # 用户指定的第1个视频位置
+            'div.video-body div:nth-child(2)',  # 第2个视频位置  
+            'div.video-body div:nth-child(3)',  # 第3个视频位置
+            'div.video-body div:nth-child(4)',  # 第4个视频位置
+            'div.video-body div:nth-child(5)',  # 第5个视频位置
+            'div.video-body div:nth-child(6)',  # 原有的第6个视频位置（保持兼容）
+        ]
+        
+        for selector in container_selectors:
+            specific_containers = soup.select(selector)
+            if specific_containers:
+                logger.debug(f"🎯 使用容器选择器 '{selector}' 找到 {len(specific_containers)} 个容器")
+                for container in specific_containers:
+                    cards_in_container = container.select('.bili-video-card, .small-item, .video-item')
+                    if cards_in_container:
+                        video_cards.extend(cards_in_container)
+                        logger.info(f"📄 在容器 '{selector}' 内找到 {len(cards_in_container)} 个视频卡片")
         
         # 第二步：如果没找到，使用扩展的全局搜索策略
         if not video_cards:
             logger.info("🔍 在指定容器内未找到视频卡片，使用扩展搜索策略")
             
             # 扩展选择器列表，涵盖更多可能的video card类名
+            # 基于用户提供的具体选择器路径进行增强
             extended_selectors = [
                 '.bili-video-card, .small-item, .video-item',  # 原有选择器
                 '.video-list-item, .video-card, .bili-video-card__wrap',  # 补充选择器
                 '[class*="video-card"], [class*="video-item"]',  # 通配符匹配
-                '.list-item[href*="/video/"]'  # 基于href属性的视频链接
+                '.list-item[href*="/video/"]',  # 基于href属性的视频链接
+                '#app main .space-upload .upload-content .video-body > div > div',  # 用户提供的完整路径结构
+                '.upload-content .video-body div[class*="video"]',  # 基于用户路径的模糊匹配
             ]
             
             for selector in extended_selectors:
