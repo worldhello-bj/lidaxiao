@@ -15,7 +15,7 @@ import asyncio
 import argparse
 
 from config import BILIBILI_UID, DEFAULT_DAYS_RANGE
-from crawler import fetch_videos, get_troubleshooting_info,enable_debug_logging
+from crawler import fetch_videos, get_troubleshooting,enable_debug
 from calculator import calculate_index
 from storage import save_all_data, load_history_data
 from visualizer import generate_all_charts, generate_historical_charts
@@ -23,9 +23,9 @@ from historical import calculate_historical_index, calculate_batch_historical, H
 
 
 
-def calculate_effective_target_date(target_date):
+def calc_effective_date(target_date):
     """
-    计算显示用的有效目标日期，减去6天（仅用于展示，不影响实际计算）
+    计算显示用的有效目标日期，减去6天（仅用于展示）
     
     注意：历史指数计算现在使用当前数据近似，不再根据此日期过滤视频
     
@@ -42,7 +42,7 @@ def calculate_effective_target_date(target_date):
     return effective_target
 
 
-def calculate_data_range_for_target(effective_target_date, current_date):
+def calc_data_range(effective_target_date, current_date):
     """
     基于有效目标日期动态计算所需的视频数据范围
     使用连续函数而非离散分类
@@ -95,7 +95,7 @@ def calculate_data_range_for_target(effective_target_date, current_date):
     }
 
 
-def determine_video_fetch_range(args, current_date):
+def determine_fetch_range(args, current_date):
     """
     根据历史计算需求动态确定视频获取范围
     
@@ -118,10 +118,10 @@ def determine_video_fetch_range(args, current_date):
         earliest_target_date = current_dt - datetime.timedelta(days=6)
     
     # 计算有效目标日期（减去6天）
-    effective_target_date = calculate_effective_target_date(earliest_target_date)
+    effective_target_date = calc_effective_date(earliest_target_date)
     
     # 基于有效目标日期动态计算数据范围
-    range_info = calculate_data_range_for_target(effective_target_date, current_dt)
+    range_info = calc_data_range(effective_target_date, current_dt)
     data_range_days = range_info["data_range_days"]
     fetch_all_pages = range_info["fetch_all_pages"]
     days_ago = range_info["days_ago"]
@@ -144,7 +144,7 @@ def determine_video_fetch_range(args, current_date):
     }
 
 
-def validate_video_data_sufficiency(videos, args):
+def validate_video_data(videos, args):
     """
     验证视频数据是否足够进行历史指数计算
     
@@ -200,7 +200,7 @@ def validate_video_data_sufficiency(videos, args):
 
 async def main():
     # 解析命令行参数
-    enable_debug_logging()
+    enable_debug()
     parser = argparse.ArgumentParser(description='李大霄指数计算程序 (使用Playwright浏览器自动化)')
     parser.add_argument('--headless', action='store_true', default=None,
                        help='强制使用无头模式 (后台运行浏览器，用于服务器环境)')
@@ -237,7 +237,7 @@ async def main():
     await run_current_mode(args, headless=headless_mode)
 
 
-def validate_historical_dates(args, current_date):
+def validate_dates(args, current_date):
     """
     验证历史日期参数，确保不是未来日期
     
@@ -276,7 +276,7 @@ async def run_historical_mode(args, headless=None):
     
     # 验证历史日期参数，防止未来日期
     try:
-        validate_historical_dates(args, current_date)
+        validate_dates(args, current_date)
     except ValueError as e:
         print(f"❌ 日期验证失败: {e}")
         print("\n💡 提示:")
@@ -287,7 +287,7 @@ async def run_historical_mode(args, headless=None):
         return
     
     # 根据目标历史日期动态确定视频获取范围，确保有足够的历史数据
-    video_fetch_range = determine_video_fetch_range(args, current_date)
+    video_fetch_range = determine_fetch_range(args, current_date)
     start_date = video_fetch_range["start_date"]
     end_date = video_fetch_range["end_date"]
     fetch_all_pages = video_fetch_range["fetch_all_pages"]
@@ -304,7 +304,7 @@ async def run_historical_mode(args, headless=None):
         print(f"获取到 {len(videos)} 个视频")
         
         # 验证视频数据是否足够
-        if not validate_video_data_sufficiency(videos, args):
+        if not validate_video_data(videos, args):
             return
         
         # 计算当前指数
@@ -315,13 +315,13 @@ async def run_historical_mode(args, headless=None):
         # 处理不同的历史计算请求
         if args.target_date:
             # 单个日期计算
-            await calculate_single_historical_date(videos, args, current_date, current_index)
+            await calc_single_date(videos, args, current_date, current_index)
         elif args.date_range:
             # 批量日期计算
-            await calculate_batch_historical_dates(videos, args, current_date, current_index)
+            await calc_batch_dates(videos, args, current_date, current_index)
         else:
             # 默认计算过去一周的历史数据
-            await calculate_default_historical_range(videos, args, current_date, current_index)
+            await calc_default_range(videos, args, current_date, current_index)
             
     except Exception as e:
         print(f"历史计算过程中发生错误: {e}")
@@ -329,10 +329,10 @@ async def run_historical_mode(args, headless=None):
         traceback.print_exc()
 
 
-async def calculate_single_historical_date(videos, args, current_date, current_index):
+async def calc_single_date(videos, args, current_date, current_index):
     """计算单个历史日期"""
     target_date = args.target_date
-    effective_date = calculate_effective_target_date(target_date)
+    effective_date = calc_effective_date(target_date)
     
     print(f"\n正在计算 {target_date} 的历史指数...")
     print("方法: 使用当前视频数据作为历史数据近似")
@@ -390,7 +390,7 @@ async def calculate_single_historical_date(videos, args, current_date, current_i
         print(f"计算失败: {e}")
 
 
-async def calculate_batch_historical_dates(videos, args, current_date, current_index):
+async def calc_batch_dates(videos, args, current_date, current_index):
     """批量计算历史日期"""
     date_range_str = args.date_range
     start_date, end_date = date_range_str.split(',')
@@ -413,7 +413,7 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
         
         for result in results:
             display_date = result['date']
-            effective_date = calculate_effective_target_date(display_date).strftime("%Y-%m-%d")
+            effective_date = calc_effective_date(display_date).strftime("%Y-%m-%d")
             status = "✓ 成功" if "error" not in result else "✗ 失败"
             print(f"{display_date:<12} {effective_date:<15} {result['index']:<15.2f} {status}")
         
@@ -479,7 +479,7 @@ async def calculate_batch_historical_dates(videos, args, current_date, current_i
         print(f"批量计算失败: {e}")
 
 
-async def calculate_default_historical_range(videos, args, current_date, current_index):
+async def calc_default_range(videos, args, current_date, current_index):
     """计算默认历史范围(过去一周)"""
     print(f"\n正在计算过去一周的历史指数近似值...")
     print("方法: 使用当前视频数据作为每个历史日期的近似值")
@@ -492,8 +492,8 @@ async def calculate_default_historical_range(videos, args, current_date, current
         raw_start_date = current_dt - datetime.timedelta(days=6)  # 过去7天
         
         # 应用6天偏移规则：实际计算时每个日期都要减去6天
-        effective_end_date = calculate_effective_target_date(raw_end_date)
-        effective_start_date = calculate_effective_target_date(raw_start_date)
+        effective_end_date = calc_effective_date(raw_end_date)
+        effective_start_date = calc_effective_date(raw_start_date)
         
         calculator = HistoricalCalculator()
         # 使用原始日期范围生成日期列表（用户看到的日期）
@@ -512,7 +512,7 @@ async def calculate_default_historical_range(videos, args, current_date, current
         
         for i, result in enumerate(results):
             display_date = result['date']
-            effective_date = calculate_effective_target_date(display_date).strftime("%Y-%m-%d")
+            effective_date = calc_effective_date(display_date).strftime("%Y-%m-%d")
             
             if i == len(results) - 1:  # 今天
                 description = "当前值"
@@ -640,7 +640,7 @@ async def run_current_mode(args, headless=None):
             print("4. 运行demo.py查看演示功能")
         
         print(f"\n详细故障排除信息:")
-        print(get_troubleshooting_info())
+        print(get_troubleshooting())
 
 
 if __name__ == "__main__":
