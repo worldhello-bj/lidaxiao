@@ -548,7 +548,7 @@ class PlaywrightBrowserSimulator:
         return too_old
 
     def parse_videos_from_html(self, html_content):
-        """解析HTML内容获取视频数据 - 性能优化版本"""
+        """解析HTML内容获取视频数据 - 增强版本，确保全部video card被处理"""
         logger.info("🎬 开始解析HTML内容获取视频数据")
         if not BS4_AVAILABLE:
             logger.error("BeautifulSoup4 not available, cannot parse HTML content")
@@ -557,14 +557,73 @@ class PlaywrightBrowserSimulator:
         soup = BeautifulSoup(html_content, 'html.parser')
         logger.info(f"📄 HTML内容长度: {len(html_content)} 字符")
         
+        # 增强：预验证页面是否包含预期的video card结构
+        self._validate_page_structure(soup)
+        
         # 性能优化：直接调用优化后的解析函数
         videos = self._parse_videos_from_html_elements(soup)
+        
+        # 增强：后验证确保没有遗漏video card
+        self._validate_extraction_completeness(soup, videos)
         
         # 只在调试模式启用时记录详细的视频解析信息
         if DEBUG_CONFIG.get("enabled", False) and DEBUG_CONFIG.get("log_video_parsing", False):
             log_video_parsing_details(videos, "HTML解析完成")
             
         return videos
+    
+    def _validate_page_structure(self, soup):
+        """验证页面结构是否包含预期的video card容器"""
+        # 检查是否存在常见的视频列表容器
+        common_containers = [
+            '.video-body', '.video-list', '.bili-video-list', 
+            '.upload-content', '.space-upload', '#app'
+        ]
+        
+        found_containers = []
+        for selector in common_containers:
+            containers = soup.select(selector)
+            if containers:
+                found_containers.append(f"{selector}({len(containers)})")
+        
+        if found_containers:
+            logger.debug(f"🏗️  页面结构检查: 找到容器 {', '.join(found_containers)}")
+        else:
+            logger.warning("⚠️  页面结构异常: 未找到常见的视频容器，可能页面结构发生变化")
+    
+    def _validate_extraction_completeness(self, soup, extracted_videos):
+        """验证视频提取的完整性，确保没有遗漏"""
+        # 统计页面中所有可能的视频链接
+        all_video_links = soup.select('a[href*="/video/av"], a[href*="/video/BV"]')
+        
+        if all_video_links:
+            total_links = len(all_video_links)
+            extracted_count = len(extracted_videos)
+            
+            logger.info(f"🔍 完整性验证: 页面共 {total_links} 个视频链接，成功提取 {extracted_count} 个")
+            
+            if extracted_count < total_links:
+                missing_count = total_links - extracted_count
+                missing_rate = (missing_count / total_links * 100)
+                
+                if missing_rate > 10:  # 遗漏率超过10%时警告
+                    logger.warning(f"⚠️  可能遗漏视频: {missing_count}/{total_links} ({missing_rate:.1f}%)")
+                    
+                    # 在调试模式下显示遗漏的链接
+                    if DEBUG_CONFIG.get("enabled", False):
+                        extracted_aids = {v.get('aid') for v in extracted_videos}
+                        for link in all_video_links[:3]:  # 只显示前3个作为示例
+                            href = link.get('href', '')
+                            if '/video/av' in href:
+                                aid_match = re.search(r'/video/av(\d+)', href)
+                                if aid_match and int(aid_match.group(1)) not in extracted_aids:
+                                    logger.debug(f"🔍 可能遗漏的视频: {href}")
+                else:
+                    logger.debug(f"📊 遗漏率在正常范围内: {missing_rate:.1f}%")
+            else:
+                logger.info("✅ 视频提取完整性验证通过")
+        else:
+            logger.debug("🔍 页面中未找到视频链接，可能为空页面或结构异常")
     
     def _parse_videos_from_html_elements(self, soup):
         """从HTML元素解析视频数据 - 性能优化版本，减少日志开销"""
@@ -576,7 +635,9 @@ class PlaywrightBrowserSimulator:
         # 用户提供的具体容器选择器：#app > main > div.space-upload > div.upload-content > div > div.video-body > div > div:nth-child(6)
         video_cards = []
         
-        # 首先尝试在用户指定的容器内查找视频卡片
+        # 增强：多层次视频卡片检测，确保全覆盖
+        
+        # 第一步：尝试用户指定的容器内查找
         specific_container = soup.select('div.video-body div:nth-child(6)')
         if specific_container:
             logger.info(f"🎯 在用户指定的容器内查找视频卡片")
@@ -585,10 +646,42 @@ class PlaywrightBrowserSimulator:
                 video_cards.extend(cards_in_container)
                 logger.info(f"📄 在容器内找到 {len(cards_in_container)} 个视频卡片")
         
-        # 如果没找到，回退到原有的全局搜索
+        # 第二步：如果没找到，使用扩展的全局搜索策略
         if not video_cards:
-            logger.info("🔍 在指定容器内未找到视频卡片，回退到全局搜索")
-            video_cards = soup.select('.bili-video-card, .small-item, .video-item')
+            logger.info("🔍 在指定容器内未找到视频卡片，使用扩展搜索策略")
+            
+            # 扩展选择器列表，涵盖更多可能的video card类名
+            extended_selectors = [
+                '.bili-video-card, .small-item, .video-item',  # 原有选择器
+                '.video-list-item, .video-card, .bili-video-card__wrap',  # 补充选择器
+                '[class*="video-card"], [class*="video-item"]',  # 通配符匹配
+                '.list-item[href*="/video/"]'  # 基于href属性的视频链接
+            ]
+            
+            for selector in extended_selectors:
+                temp_cards = soup.select(selector)
+                if temp_cards:
+                    video_cards.extend(temp_cards)
+                    logger.info(f"📄 使用选择器 '{selector}' 找到 {len(temp_cards)} 个额外视频卡片")
+            
+            # 去重（避免重复选择器匹配同一元素）
+            unique_cards = []
+            seen_hrefs = set()
+            for card in video_cards:
+                # 通过href属性去重
+                link = card.find('a', href=True)
+                if link and link['href'] not in seen_hrefs:
+                    unique_cards.append(card)
+                    seen_hrefs.add(link['href'])
+                elif not link:
+                    # 没有链接的情况下，通过元素内容去重
+                    card_text = card.get_text(strip=True)[:50]  # 取前50字符作为唯一标识
+                    if card_text not in seen_hrefs:
+                        unique_cards.append(card)
+                        seen_hrefs.add(card_text)
+            
+            video_cards = unique_cards
+            logger.info(f"📄 去重后共找到 {len(video_cards)} 个唯一视频卡片")
         
         logger.info(f"📄 总共找到 {len(video_cards)} 个视频卡片元素")
         
@@ -728,6 +821,24 @@ class PlaywrightBrowserSimulator:
                 continue
         
         logger.info(f"从HTML元素解析到 {len(videos)} 个视频，成功 {parsed_count} 个，失败 {failed_count} 个")
+        
+        # 增强：验证video card处理完整性
+        total_cards = len(video_cards)
+        success_rate = (parsed_count / total_cards * 100) if total_cards > 0 else 0
+        
+        if total_cards > 0:
+            logger.info(f"✅ Video Card处理完整性: {parsed_count}/{total_cards} ({success_rate:.1f}%)")
+            
+            # 如果失败率过高，给出警告
+            if failed_count > 0:
+                failure_rate = (failed_count / total_cards * 100)
+                if failure_rate > 20:  # 失败率超过20%时警告
+                    logger.warning(f"⚠️  Video Card解析失败率较高: {failure_rate:.1f}% ({failed_count}/{total_cards})")
+                    logger.warning("建议检查页面HTML结构或选择器匹配规则")
+                else:
+                    logger.info(f"📊 少量video card解析失败: {failure_rate:.1f}% ({failed_count}/{total_cards}) - 正常范围内")
+        else:
+            logger.warning("⚠️  未找到任何video card，可能页面结构发生变化或选择器需要更新")
         
         # 在调试模式下输出更多详细信息
         if DEBUG_CONFIG.get("enabled", False) and DEBUG_CONFIG.get("log_video_parsing", False):
