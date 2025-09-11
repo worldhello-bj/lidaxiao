@@ -637,7 +637,19 @@ class PlaywrightBrowserSimulator:
         
         # 增强：多层次视频卡片检测，确保全覆盖
         
-        # 第一步：尝试用户指定的容器内查找视频卡片
+        # 第一步：尝试新的upload-video-card格式检测
+        # 基于用户提供的B站视频格式：<div class="upload-video-card grid-mode">
+        upload_video_cards = soup.select('.upload-video-card')
+        if upload_video_cards:
+            logger.info(f"🎯 检测到新格式 upload-video-card 容器 {len(upload_video_cards)} 个")
+            for container in upload_video_cards:
+                # 在upload-video-card内查找bili-video-card
+                cards_in_container = container.select('.bili-video-card, .bili-video-card__wrap, .small-item, .video-item')
+                if cards_in_container:
+                    video_cards.extend(cards_in_container)
+                    logger.info(f"📄 在 upload-video-card 容器内找到 {len(cards_in_container)} 个视频卡片")
+        
+        # 第二步：尝试传统的video-body容器检测
         # 基于用户反馈：从第一个位置开始动态搜索直到没有更多视频
         # 动态搜索策略：从nth-child(1)开始，持续搜索直到没有更多视频卡片
         
@@ -693,9 +705,11 @@ class PlaywrightBrowserSimulator:
             logger.info("🔍 在指定容器内未找到视频卡片，使用扩展搜索策略")
             
             # 扩展选择器列表，涵盖更多可能的video card类名
-            # 基于用户提供的具体选择器路径进行增强
+            # 基于用户提供的具体选择器路径和新的upload-video-card格式进行增强
             extended_selectors = [
                 '.bili-video-card, .small-item, .video-item',  # 原有选择器
+                '.upload-video-card .bili-video-card',  # 新格式：upload-video-card 内的 bili-video-card
+                '.upload-video-card',  # 新格式容器
                 '.video-list-item, .video-card, .bili-video-card__wrap',  # 补充选择器
                 '[class*="video-card"], [class*="video-item"]',  # 通配符匹配
                 '.list-item[href*="/video/"]',  # 基于href属性的视频链接

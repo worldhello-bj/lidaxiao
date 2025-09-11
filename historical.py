@@ -401,7 +401,7 @@ def calc_batch_historical(videos: List[Dict], date_range: List[str],
     :param current_date: 当前日期，默认为今天
     :return: 历史数据列表
     """
-    calculator = create_historical_calculator()
+    calculator = create_calculator()
     return calculator.calc_batch_historical(videos, date_range, current_date)
 
 
@@ -416,7 +416,7 @@ def debug_calculation_process(videos: List[Dict], target_date: str,
     :param current_date: 当前日期，默认为今天
     :return: 详细的调试信息字典
     """
-    calculator = create_historical_calculator()
+    calculator = create_calculator()
     return calculator.debug_calculation_process(videos, target_date, current_date)
 
 
@@ -433,7 +433,7 @@ def debug_batch_calculation(videos: List[Dict], date_range: List[str],
     :param sample_dates: 采样调试的日期数量（从头尾各取几个）
     :return: 批量调试信息
     """
-    calculator = create_historical_calculator()
+    calculator = create_calculator()
     
     # 选择采样日期进行详细调试
     sample_indices = []
