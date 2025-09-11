@@ -37,18 +37,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def enable_debug_logging():
-    """启用调试日志模式"""
+def enable_debug():
+    """启用调试模式"""
     DEBUG_CONFIG["enabled"] = True
     # 设置日志级别为DEBUG
     logging.getLogger().setLevel(logging.DEBUG)
     logger.setLevel(logging.DEBUG)
     logger.debug("🔍 调试日志模式已启用")
-    log_configuration_state()
+    log_config()
 
 
-def log_configuration_state():
-    """记录当前配置状态"""
+def log_config():
+    """记录配置状态"""
     if not DEBUG_CONFIG.get("log_configuration", False):
         return
         
@@ -58,8 +58,8 @@ def log_configuration_state():
     logger.debug(f"  调试配置: {DEBUG_CONFIG}")
 
 
-def log_page_state(page, operation="未知操作"):
-    """记录页面状态信息"""
+def log_page(page, operation="未知操作"):
+    """记录页面状态"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_page_states", False):
         return
         
@@ -71,8 +71,8 @@ def log_page_state(page, operation="未知操作"):
         logger.debug(f"❌ 无法获取页面状态: {e}")
 
 
-async def log_dom_snapshot(page, operation="未知操作"):
-    """记录DOM快照信息"""
+async def log_dom(page, operation="未知操作"):
+    """记录DOM快照"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_dom_snapshots", False):
         return
         
@@ -88,8 +88,8 @@ async def log_dom_snapshot(page, operation="未知操作"):
         logger.debug(f"❌ 无法获取DOM快照: {e}")
 
 
-def log_selector_search(selector, elements_found, operation="选择器查找"):
-    """记录选择器查找详情"""
+def log_selector(selector, elements_found, operation="选择器查找"):
+    """记录选择器查找"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_selectors", False):
         return
         
@@ -98,8 +98,8 @@ def log_selector_search(selector, elements_found, operation="选择器查找"):
     logger.debug(f"  找到元素数量: {elements_found}")
 
 
-def log_video_parsing_details(videos, operation="视频解析"):
-    """记录视频数据解析详情"""
+def log_video_parsing(videos, operation="视频解析"):
+    """记录视频解析"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_video_parsing", False):
         return
         
@@ -117,8 +117,8 @@ def log_video_parsing_details(videos, operation="视频解析"):
         logger.debug(f"  ... 还有 {len(videos) - 3} 个视频")
 
 
-def log_retry_attempt(attempt, max_attempts, error, delay=None):
-    """记录重试尝试详情"""
+def log_retry(attempt, max_attempts, error, delay=None):
+    """记录重试详情"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_retries", False):
         return
         
@@ -130,8 +130,8 @@ def log_retry_attempt(attempt, max_attempts, error, delay=None):
     logger.debug(f"  错误堆栈: {traceback.format_exc()}")
 
 
-def log_pagination_details(page_num, total_pages=None, has_next=None):
-    """记录分页操作详情"""
+def log_pagination(page_num, total_pages=None, has_next=None):
+    """记录分页信息"""
     if not DEBUG_CONFIG.get("enabled", False) or not DEBUG_CONFIG.get("log_pagination", False):
         return
         
@@ -143,8 +143,8 @@ def log_pagination_details(page_num, total_pages=None, has_next=None):
         logger.debug(f"  有下一页: {has_next}")
 
 
-def log_exception_context(operation, exception, context=None):
-    """记录异常和上下文信息"""
+def log_exception(operation, exception, context=None):
+    """记录异常信息"""
     logger.error(f"❌ 操作失败: {operation}")
     logger.error(f"  异常类型: {type(exception).__name__}")
     logger.error(f"  异常信息: {str(exception)}")
@@ -260,13 +260,13 @@ class PlaywrightBrowserSimulator:
             try:
                 # 修复：避免使用networkidle，改用domcontentloaded提高速度
                 await self.page.goto(url, wait_until='domcontentloaded', timeout=TIMING_CONFIG["network_timeout"])
-                log_page_state(self.page, "首页导航完成")
+                log_page(self.page, "首页导航完成")
                 
                 # 短暂等待确保关键元素加载完成
                 await self.page.wait_for_timeout(300)
                 logger.debug(f"⏱️ 页面加载等待完成: 300ms")
             except Exception as e:
-                log_exception_context("首页导航", e, {"url": url, "uid": uid})
+                log_exception("首页导航", e, {"url": url, "uid": uid})
                 raise
         else:
             # 非首页通过点击分页按钮导航
@@ -276,9 +276,9 @@ class PlaywrightBrowserSimulator:
                 if not success:
                     logger.warning(f"无法找到或点击第{page_num}页的分页按钮")
                     return None
-                log_page_state(self.page, f"第{page_num}页导航完成")
+                log_page(self.page, f"第{page_num}页导航完成")
             except Exception as e:
-                log_exception_context("分页导航", e, {"page_num": page_num, "uid": uid})
+                log_exception("分页导航", e, {"page_num": page_num, "uid": uid})
                 raise
         
         try:
@@ -289,7 +289,7 @@ class PlaywrightBrowserSimulator:
             
             # 检查找到的视频元素数量
             video_elements = await self.page.query_selector_all(selector)
-            log_selector_search(selector, len(video_elements), "视频列表加载检查")
+            log_selector(selector, len(video_elements), "视频列表加载检查")
             
             # 优化：使用异步滚动，避免阻塞
             logger.debug("📜 执行页面滚动以触发懒加载")
@@ -312,12 +312,12 @@ class PlaywrightBrowserSimulator:
             logger.debug(f"📄 获取到页面内容，长度: {len(content)} 字符")
             
             # 记录DOM快照（如果启用）
-            await log_dom_snapshot(self.page, f"第{page_num}页内容获取")
+            await log_dom(self.page, f"第{page_num}页内容获取")
             
             return content
             
         except Exception as e:
-            log_exception_context("获取页面内容", e, {"page_num": page_num, "uid": uid})
+            log_exception("获取页面内容", e, {"page_num": page_num, "uid": uid})
             raise
 
     async def check_pagination_info(self):
@@ -393,7 +393,7 @@ class PlaywrightBrowserSimulator:
                     logger.debug(f"❌ 总页数选择器 {selector} 失败: {e}")
                     continue
             
-            log_pagination_details(current_page, total_pages, has_next)
+            log_pagination(current_page, total_pages, has_next)
             logger.debug(f"分页信息: 当前页={current_page}, 总页数={total_pages}, 有下一页={has_next}")
             return {
                 'current_page': current_page,
@@ -402,7 +402,7 @@ class PlaywrightBrowserSimulator:
             }
             
         except Exception as e:
-            log_exception_context("获取分页信息", e)
+            log_exception("获取分页信息", e)
             logger.debug(f"获取分页信息失败: {e}")
             return {
                 'current_page': 1,
@@ -434,7 +434,7 @@ class PlaywrightBrowserSimulator:
                     # 检查按钮是否存在
                     button = self.page.locator(selector).first
                     button_count = await button.count()
-                    log_selector_search(selector, button_count, f"第{target_page_num}页按钮查找")
+                    log_selector(selector, button_count, f"第{target_page_num}页按钮查找")
                     
                     if button_count > 0:
                         logger.info(f"找到分页按钮，使用选择器: {selector}")
@@ -461,7 +461,7 @@ class PlaywrightBrowserSimulator:
                         
                         button_found = True
                         logger.info(f"成功点击第{target_page_num}页分页按钮")
-                        log_page_state(self.page, f"第{target_page_num}页点击完成")
+                        log_page(self.page, f"第{target_page_num}页点击完成")
                         break
                         
                 except Exception as e:
@@ -484,7 +484,7 @@ class PlaywrightBrowserSimulator:
                         button_count = await button.count()
                         is_enabled = await button.is_enabled(timeout=TIMING_CONFIG["element_timeout"]) if button_count > 0 else False
                         
-                        log_selector_search(selector, button_count, "下一页按钮查找")
+                        log_selector(selector, button_count, "下一页按钮查找")
                         logger.debug(f"🔍 下一页按钮状态 - 数量: {button_count}, 可用: {is_enabled}")
                         
                         if button_count > 0 and is_enabled:
@@ -511,18 +511,18 @@ class PlaywrightBrowserSimulator:
                             
                             button_found = True
                             logger.info(f"成功点击下一页按钮")
-                            log_page_state(self.page, "下一页点击完成")
+                            log_page(self.page, "下一页点击完成")
                             break
                             
                     except Exception as e:
                         logger.debug(f"下一页选择器 {selector} 不可用: {e}")
                         continue
             
-            log_pagination_details(target_page_num, None, button_found)
+            log_pagination(target_page_num, None, button_found)
             return button_found
             
         except Exception as e:
-            log_exception_context(f"导航到第{target_page_num}页", e, {"target_page": target_page_num})
+            log_exception(f"导航到第{target_page_num}页", e, {"target_page": target_page_num})
             logger.error(f"导航到第{target_page_num}页失败: {e}")
             return False
             
@@ -548,7 +548,7 @@ class PlaywrightBrowserSimulator:
         return too_old
 
     def parse_videos_from_html(self, html_content):
-        """解析HTML内容获取视频数据 - 性能优化版本"""
+        """解析HTML内容获取视频数据 - 增强版本，确保全部video card被处理"""
         logger.info("🎬 开始解析HTML内容获取视频数据")
         if not BS4_AVAILABLE:
             logger.error("BeautifulSoup4 not available, cannot parse HTML content")
@@ -557,17 +557,76 @@ class PlaywrightBrowserSimulator:
         soup = BeautifulSoup(html_content, 'html.parser')
         logger.info(f"📄 HTML内容长度: {len(html_content)} 字符")
         
+        # 增强：预验证页面是否包含预期的video card结构
+        self._validate_page(soup)
+        
         # 性能优化：直接调用优化后的解析函数
-        videos = self._parse_videos_from_html_elements(soup)
+        videos = self._parse_video_elements(soup)
+        
+        # 增强：后验证确保没有遗漏video card
+        self._validate_extraction(soup, videos)
         
         # 只在调试模式启用时记录详细的视频解析信息
         if DEBUG_CONFIG.get("enabled", False) and DEBUG_CONFIG.get("log_video_parsing", False):
-            log_video_parsing_details(videos, "HTML解析完成")
+            log_video_parsing(videos, "HTML解析完成")
             
         return videos
     
-    def _parse_videos_from_html_elements(self, soup):
-        """从HTML元素解析视频数据 - 性能优化版本，减少日志开销"""
+    def _validate_page(self, soup):
+        """验证页面结构"""
+        # 检查是否存在常见的视频列表容器
+        common_containers = [
+            '.video-body', '.video-list', '.bili-video-list', 
+            '.upload-content', '.space-upload', '#app'
+        ]
+        
+        found_containers = []
+        for selector in common_containers:
+            containers = soup.select(selector)
+            if containers:
+                found_containers.append(f"{selector}({len(containers)})")
+        
+        if found_containers:
+            logger.debug(f"🏗️  页面结构检查: 找到容器 {', '.join(found_containers)}")
+        else:
+            logger.warning("⚠️  页面结构异常: 未找到常见的视频容器，可能页面结构发生变化")
+    
+    def _validate_extraction(self, soup, extracted_videos):
+        """验证提取完整性"""
+        # 统计页面中所有可能的视频链接
+        all_video_links = soup.select('a[href*="/video/av"], a[href*="/video/BV"]')
+        
+        if all_video_links:
+            total_links = len(all_video_links)
+            extracted_count = len(extracted_videos)
+            
+            logger.info(f"🔍 完整性验证: 页面共 {total_links} 个视频链接，成功提取 {extracted_count} 个")
+            
+            if extracted_count < total_links:
+                missing_count = total_links - extracted_count
+                missing_rate = (missing_count / total_links * 100)
+                
+                if missing_rate > 10:  # 遗漏率超过10%时警告
+                    logger.warning(f"⚠️  可能遗漏视频: {missing_count}/{total_links} ({missing_rate:.1f}%)")
+                    
+                    # 在调试模式下显示遗漏的链接
+                    if DEBUG_CONFIG.get("enabled", False):
+                        extracted_aids = {v.get('aid') for v in extracted_videos}
+                        for link in all_video_links[:3]:  # 只显示前3个作为示例
+                            href = link.get('href', '')
+                            if '/video/av' in href:
+                                aid_match = re.search(r'/video/av(\d+)', href)
+                                if aid_match and int(aid_match.group(1)) not in extracted_aids:
+                                    logger.debug(f"🔍 可能遗漏的视频: {href}")
+                else:
+                    logger.debug(f"📊 遗漏率在正常范围内: {missing_rate:.1f}%")
+            else:
+                logger.info("✅ 视频提取完整性验证通过")
+        else:
+            logger.debug("🔍 页面中未找到视频链接，可能为空页面或结构异常")
+    
+    def _parse_video_elements(self, soup):
+        """解析视频数据"""
         videos = []
         logger.info("🔍 开始从HTML元素解析视频数据")
         
@@ -576,19 +635,112 @@ class PlaywrightBrowserSimulator:
         # 用户提供的具体容器选择器：#app > main > div.space-upload > div.upload-content > div > div.video-body > div > div:nth-child(6)
         video_cards = []
         
-        # 首先尝试在用户指定的容器内查找视频卡片
-        specific_container = soup.select('div.video-body div:nth-child(6)')
-        if specific_container:
-            logger.info(f"🎯 在用户指定的容器内查找视频卡片")
-            for container in specific_container:
-                cards_in_container = container.select('.bili-video-card, .small-item, .video-item')
-                video_cards.extend(cards_in_container)
-                logger.info(f"📄 在容器内找到 {len(cards_in_container)} 个视频卡片")
+        # 增强：多层次视频卡片检测，确保全覆盖
         
-        # 如果没找到，回退到原有的全局搜索
+        # 第一步：尝试新的upload-video-card格式检测
+        # 基于用户提供的B站视频格式：<div class="upload-video-card grid-mode">
+        upload_video_cards = soup.select('.upload-video-card')
+        if upload_video_cards:
+            logger.info(f"🎯 检测到新格式 upload-video-card 容器 {len(upload_video_cards)} 个")
+            for container in upload_video_cards:
+                # 在upload-video-card内查找bili-video-card
+                cards_in_container = container.select('.bili-video-card, .bili-video-card__wrap, .small-item, .video-item')
+                if cards_in_container:
+                    video_cards.extend(cards_in_container)
+                    logger.info(f"📄 在 upload-video-card 容器内找到 {len(cards_in_container)} 个视频卡片")
+        
+        # 第二步：尝试传统的video-body容器检测
+        # 基于用户反馈：从第一个位置开始动态搜索直到没有更多视频
+        # 动态搜索策略：从nth-child(1)开始，持续搜索直到没有更多视频卡片
+        
+        # 首先尝试全局选择器获取所有视频
+        all_videos_selector = 'div.video-body > div > div'
+        all_containers = soup.select(all_videos_selector)
+        if all_containers:
+            logger.debug(f"🎯 使用全局选择器 '{all_videos_selector}' 找到 {len(all_containers)} 个容器")
+            for container in all_containers:
+                cards_in_container = container.select('.bili-video-card, .small-item, .video-item')
+                if cards_in_container:
+                    video_cards.extend(cards_in_container)
+                    logger.info(f"📄 在全局容器内找到 {len(cards_in_container)} 个视频卡片")
+        
+        # 如果全局选择器没找到足够的内容，使用动态nth-child搜索
+        # 从第1个位置开始搜索，直到没有更多视频为止
+        position = 1
+        max_search_positions = 50  # 设置合理的最大搜索位置限制，防止无限循环
+        
+        logger.info("🔍 开始动态nth-child位置搜索（从第1个位置开始直到没有更多视频）")
+        
+        while position <= max_search_positions:
+            nth_child_selector = f'div.video-body div:nth-child({position})'
+            specific_containers = soup.select(nth_child_selector)
+            
+            if specific_containers:
+                found_videos = False
+                logger.debug(f"🎯 使用nth-child选择器 '{nth_child_selector}' 找到 {len(specific_containers)} 个容器")
+                
+                for container in specific_containers:
+                    cards_in_container = container.select('.bili-video-card, .small-item, .video-item')
+                    if cards_in_container:
+                        video_cards.extend(cards_in_container)
+                        found_videos = True
+                        logger.debug(f"📄 在第{position}个位置找到 {len(cards_in_container)} 个视频卡片")
+                
+                if found_videos:
+                    logger.info(f"✅ 第{position}个位置成功找到视频卡片")
+                else:
+                    logger.debug(f"⚪ 第{position}个位置容器存在但无视频卡片")
+                
+                position += 1
+            else:
+                # 没有找到容器，说明已经搜索完所有位置
+                logger.info(f"🏁 搜索完成：在第{position}个位置未找到更多容器，共搜索了 {position-1} 个位置")
+                break
+        
+        if position > max_search_positions:
+            logger.warning(f"⚠️ 达到最大搜索位置限制 ({max_search_positions})，停止搜索")
+        
+        # 第二步：如果没找到，使用扩展的全局搜索策略
         if not video_cards:
-            logger.info("🔍 在指定容器内未找到视频卡片，回退到全局搜索")
-            video_cards = soup.select('.bili-video-card, .small-item, .video-item')
+            logger.info("🔍 在指定容器内未找到视频卡片，使用扩展搜索策略")
+            
+            # 扩展选择器列表，涵盖更多可能的video card类名
+            # 基于用户提供的具体选择器路径和新的upload-video-card格式进行增强
+            extended_selectors = [
+                '.bili-video-card, .small-item, .video-item',  # 原有选择器
+                '.upload-video-card .bili-video-card',  # 新格式：upload-video-card 内的 bili-video-card
+                '.upload-video-card',  # 新格式容器
+                '.video-list-item, .video-card, .bili-video-card__wrap',  # 补充选择器
+                '[class*="video-card"], [class*="video-item"]',  # 通配符匹配
+                '.list-item[href*="/video/"]',  # 基于href属性的视频链接
+                '#app main .space-upload .upload-content .video-body > div > div',  # 用户提供的完整路径结构
+                '.upload-content .video-body div[class*="video"]',  # 基于用户路径的模糊匹配
+            ]
+            
+            for selector in extended_selectors:
+                temp_cards = soup.select(selector)
+                if temp_cards:
+                    video_cards.extend(temp_cards)
+                    logger.info(f"📄 使用选择器 '{selector}' 找到 {len(temp_cards)} 个额外视频卡片")
+            
+            # 去重（避免重复选择器匹配同一元素）
+            unique_cards = []
+            seen_hrefs = set()
+            for card in video_cards:
+                # 通过href属性去重
+                link = card.find('a', href=True)
+                if link and link['href'] not in seen_hrefs:
+                    unique_cards.append(card)
+                    seen_hrefs.add(link['href'])
+                elif not link:
+                    # 没有链接的情况下，通过元素内容去重
+                    card_text = card.get_text(strip=True)[:50]  # 取前50字符作为唯一标识
+                    if card_text not in seen_hrefs:
+                        unique_cards.append(card)
+                        seen_hrefs.add(card_text)
+            
+            video_cards = unique_cards
+            logger.info(f"📄 去重后共找到 {len(video_cards)} 个唯一视频卡片")
         
         logger.info(f"📄 总共找到 {len(video_cards)} 个视频卡片元素")
         
@@ -686,11 +838,11 @@ class PlaywrightBrowserSimulator:
                 
                 # 修复：如果无法从统计元素提取到播放量，尝试从标题提取
                 if view_count == 0:
-                    view_count = self._extract_view_count_from_title(title)
+                    view_count = self._extract_view_count(title)
                 
                 # 超级优化：简化时间戳提取，解决5分钟性能问题
                 # 在用户指定的视频卡片容器内查找发布日期
-                created_timestamp = self._extract_publish_timestamp_fast(card)
+                created_timestamp = self._extract_timestamp(card)
                 
                 # 在调试模式下记录提取到的数据
                 if DEBUG_CONFIG.get("enabled", False) and DEBUG_CONFIG.get("log_video_parsing", False):
@@ -724,10 +876,28 @@ class PlaywrightBrowserSimulator:
                 failed_count += 1
                 # 只在调试模式下输出解析错误的详细信息
                 if DEBUG_CONFIG.get("enabled", False):
-                    log_exception_context(f"解析第{i+1}个视频卡片", e, {"card_index": i})
+                    log_exception(f"解析第{i+1}个视频卡片", e, {"card_index": i})
                 continue
         
         logger.info(f"从HTML元素解析到 {len(videos)} 个视频，成功 {parsed_count} 个，失败 {failed_count} 个")
+        
+        # 增强：验证video card处理完整性
+        total_cards = len(video_cards)
+        success_rate = (parsed_count / total_cards * 100) if total_cards > 0 else 0
+        
+        if total_cards > 0:
+            logger.info(f"✅ Video Card处理完整性: {parsed_count}/{total_cards} ({success_rate:.1f}%)")
+            
+            # 如果失败率过高，给出警告
+            if failed_count > 0:
+                failure_rate = (failed_count / total_cards * 100)
+                if failure_rate > 20:  # 失败率超过20%时警告
+                    logger.warning(f"⚠️  Video Card解析失败率较高: {failure_rate:.1f}% ({failed_count}/{total_cards})")
+                    logger.warning("建议检查页面HTML结构或选择器匹配规则")
+                else:
+                    logger.info(f"📊 少量video card解析失败: {failure_rate:.1f}% ({failed_count}/{total_cards}) - 正常范围内")
+        else:
+            logger.warning("⚠️  未找到任何video card，可能页面结构发生变化或选择器需要更新")
         
         # 在调试模式下输出更多详细信息
         if DEBUG_CONFIG.get("enabled", False) and DEBUG_CONFIG.get("log_video_parsing", False):
@@ -773,8 +943,8 @@ class PlaywrightBrowserSimulator:
             
         return 0
 
-    def _extract_view_count_from_title(self, title):
-        """从视频标题提取播放量 - 修复播放量为0的问题"""
+    def _extract_view_count(self, title):
+        """提取播放量"""
         if not title:
             return 0
         
@@ -804,8 +974,8 @@ class PlaywrightBrowserSimulator:
         
         return 0
 
-    def _extract_publish_timestamp_fast(self, card):
-        """超级优化的时间戳提取 - 专门解决5分钟解析42个视频的性能问题"""
+    def _extract_timestamp(self, card):
+        """提取时间戳"""
         try:
             # 超级优化：直接查找最常见的时间元素，避免复杂的CSS选择器
             # 在用户指定的视频卡片容器内查找发布日期
@@ -815,7 +985,7 @@ class PlaywrightBrowserSimulator:
             for span in spans_with_title:
                 title_text = span.get('title', '')
                 if title_text and ('2024' in title_text or '2023' in title_text or '小时前' in title_text or '分钟前' in title_text or '天前' in title_text):
-                    timestamp = self._parse_time_string_ultra_fast(title_text)
+                    timestamp = self._parse_time_fast(title_text)
                     if timestamp > 0:
                         if DEBUG_CONFIG.get("enabled", False):
                             logger.debug(f"🕒 从title属性提取时间戳: {title_text} -> {timestamp}")
@@ -849,7 +1019,7 @@ class PlaywrightBrowserSimulator:
                         # 检查title属性
                         title_text = time_elem.get('title', '')
                         if title_text:
-                            timestamp = self._parse_time_string_ultra_fast(title_text)
+                            timestamp = self._parse_time_fast(title_text)
                             if timestamp > 0:
                                 if DEBUG_CONFIG.get("enabled", False):
                                     logger.debug(f"🕒 从{selector}的title属性提取时间戳: {title_text} -> {timestamp}")
@@ -858,7 +1028,7 @@ class PlaywrightBrowserSimulator:
                         # 检查元素文本内容
                         text_content = time_elem.get_text(strip=True)
                         if text_content:
-                            timestamp = self._parse_time_string_ultra_fast(text_content)
+                            timestamp = self._parse_time_fast(text_content)
                             if timestamp > 0:
                                 if DEBUG_CONFIG.get("enabled", False):
                                     logger.debug(f"🕒 从{selector}的文本内容提取时间戳: {text_content} -> {timestamp}")
@@ -871,7 +1041,7 @@ class PlaywrightBrowserSimulator:
             for span in spans:
                 text = span.get_text(strip=True)
                 if text and ('小时前' in text or '分钟前' in text or '天前' in text or '个月前' in text or '年前' in text):
-                    timestamp = self._parse_time_string_ultra_fast(text)
+                    timestamp = self._parse_time_fast(text)
                     if timestamp > 0:
                         if DEBUG_CONFIG.get("enabled", False):
                             logger.debug(f"🕒 从span文本内容提取时间戳: {text} -> {timestamp}")
@@ -885,8 +1055,8 @@ class PlaywrightBrowserSimulator:
             logger.debug("🕒 无法提取时间戳，使用当前时间作为fallback")
         return int(time.time())  # 默认当前时间
 
-    def _parse_time_string_ultra_fast(self, time_str):
-        """超级优化的时间字符串解析 - 专门解决5分钟性能问题"""
+    def _parse_time_fast(self, time_str):
+        """解析时间字符串"""
         try:
             time_str = time_str.strip()
             current_time = datetime.datetime.now()
@@ -953,186 +1123,7 @@ class PlaywrightBrowserSimulator:
         
         return 0
 
-    def _extract_publish_timestamp(self, card):
-        """从视频卡片提取发布时间戳"""
-        try:
-            # 优先使用B站具体的时间显示位置选择器
-            bilibili_time_selectors = [
-                # B站视频卡片的subtitle区域（用户提供的具体选择器）
-                '.bili-video-card__subtitle',
-                '.bili-video-card__details .bili-video-card__subtitle',
-                # 其他常见的时间选择器
-                'span[title]',  # 带title属性的span
-                '.time',        # class包含time的元素
-                '.date',        # class包含date的元素
-                '.pubdate',     # 发布日期类
-                '.upload-time', # 上传时间类
-                'time',         # time标签
-                '[data-time]',  # 带data-time属性的元素
-            ]
-            
-            # 遍历时间选择器寻找时间信息
-            for selector in bilibili_time_selectors:
-                time_elements = card.select(selector)
-                for elem in time_elements:
-                    # 检查title属性
-                    title_text = elem.get('title', '')
-                    if title_text:
-                        timestamp = self._parse_time_string(title_text)
-                        if timestamp > 0:
-                            logger.debug(f"从title属性提取时间戳: {title_text} -> {timestamp}")
-                            return timestamp
-                    
-                    # 检查data-time属性
-                    data_time = elem.get('data-time', '')
-                    if data_time:
-                        try:
-                            timestamp = int(data_time)
-                            logger.debug(f"从data-time属性提取时间戳: {data_time}")
-                            return timestamp
-                        except ValueError:
-                            pass
-                    
-                    # 检查元素文本内容
-                    text_content = elem.get_text(strip=True)
-                    if text_content:
-                        timestamp = self._parse_time_string(text_content)
-                        if timestamp > 0:
-                            logger.debug(f"从文本内容提取时间戳: {text_content} -> {timestamp}")
-                            return timestamp
-            
-            # 如果没有找到具体时间，在整个卡片中搜索时间模式
-            time_patterns = [
-                # B站时间格式模式（处理格式不统一问题）
-                r'(\d+小时前)',               # X小时前（24小时内）
-                r'(\d+分钟前)',               # X分钟前
-                r'(\d+天前)',                 # X天前
-                r'(\d{1,2}-\d{1,2})',        # MM-DD format（24小时外）
-                r'(\d{4}-\d{1,2}-\d{1,2})',  # YYYY-MM-DD format
-                r'(\d{4}/\d{1,2}/\d{1,2})',  # YYYY/MM/DD format
-                r'(\d{1,2}/\d{1,2})',        # MM/DD format
-                r'(\d+个月前)',               # X个月前
-                r'(\d+年前)',                 # X年前
-            ]
-            
-            card_text = card.get_text()
-            for pattern in time_patterns:
-                match = re.search(pattern, card_text)
-                if match:
-                    timestamp = self._parse_time_string(match.group(1))
-                    if timestamp > 0:
-                        logger.debug(f"从卡片文本提取时间戳: {match.group(1)} -> {timestamp}")
-                        return timestamp
-            
-        except Exception as e:
-            logger.debug(f"提取时间戳失败: {e}")
-        
-        # 如果无法提取时间戳，返回当前时间作为fallback
-        logger.debug("无法从HTML提取发布时间，使用当前时间作为fallback")
-        return int(time.time())
-    
-    def _parse_time_string(self, time_str):
-        """
-        解析时间字符串为时间戳
-        处理B站时间显示的格式不统一问题：
-        - 24小时内：显示小时格式（如"2小时前"）
-        - 24小时外：显示日期格式（如"01-15"）
-        """
-        try:
-            current_time = datetime.datetime.now()
-            time_str = time_str.strip()
-            
-            # 处理相对时间格式（24小时内常见）
-            if '小时前' in time_str:
-                hours_match = re.search(r'(\d+)小时前', time_str)
-                if hours_match:
-                    hours = int(hours_match.group(1))
-                    target_time = current_time - datetime.timedelta(hours=hours)
-                    return int(target_time.timestamp())
-            elif '分钟前' in time_str:
-                minutes_match = re.search(r'(\d+)分钟前', time_str)
-                if minutes_match:
-                    minutes = int(minutes_match.group(1))
-                    target_time = current_time - datetime.timedelta(minutes=minutes)
-                    return int(target_time.timestamp())
-            elif '天前' in time_str:
-                days_match = re.search(r'(\d+)天前', time_str)
-                if days_match:
-                    days = int(days_match.group(1))
-                    target_time = current_time - datetime.timedelta(days=days)
-                    return int(target_time.timestamp())
-            elif '个月前' in time_str:
-                months_match = re.search(r'(\d+)个月前', time_str)
-                if months_match:
-                    months = int(months_match.group(1))
-                    target_time = current_time - datetime.timedelta(days=months * 30)  # 近似处理
-                    return int(target_time.timestamp())
-            elif '年前' in time_str:
-                years_match = re.search(r'(\d+)年前', time_str)
-                if years_match:
-                    years = int(years_match.group(1))
-                    target_time = current_time - datetime.timedelta(days=years * 365)  # 近似处理
-                    return int(target_time.timestamp())
-            
-            # 处理绝对时间格式（24小时外常见，格式不统一问题的核心）
-            date_formats = [
-                # B站常见的日期格式
-                '%Y-%m-%d %H:%M:%S',  # 2024-01-01 12:00:00
-                '%Y-%m-%d %H:%M',     # 2024-01-01 12:00
-                '%Y-%m-%d',           # 2024-01-01
-                '%Y/%m/%d %H:%M:%S',  # 2024/01/01 12:00:00
-                '%Y/%m/%d %H:%M',     # 2024/01/01 12:00
-                '%Y/%m/%d',           # 2024/01/01
-                # 只有月日的格式（B站24小时外常用）
-                '%m-%d %H:%M',        # 01-15 12:00 (当年)
-                '%m-%d',              # 01-15 (当年，B站常见格式)
-                '%m/%d %H:%M',        # 01/15 12:00 (当年)
-                '%m/%d',              # 01/15 (当年)
-            ]
-            
-            for fmt in date_formats:
-                try:
-                    if '%Y' not in fmt:
-                        # 处理没有年份的格式（B站格式不统一的重点）
-                        # 假设是当年，但需要考虑跨年情况
-                        if '%m-%d' in fmt:
-                            # 处理 "01-15" 格式
-                            parsed_time = datetime.datetime.strptime(f"{current_time.year}-{time_str}", f"%Y-{fmt}")
-                        elif '%m/%d' in fmt:
-                            # 处理 "01/15" 格式
-                            parsed_time = datetime.datetime.strptime(f"{current_time.year}-{time_str.replace('/', '-')}", f"%Y-%m-%d")
-                        else:
-                            parsed_time = datetime.datetime.strptime(time_str, fmt)
-                        
-                        # 如果解析的日期是未来的日期，那么应该是去年的
-                        if parsed_time > current_time:
-                            parsed_time = parsed_time.replace(year=current_time.year - 1)
-                        
-                    else:
-                        parsed_time = datetime.datetime.strptime(time_str, fmt)
-                    
-                    return int(parsed_time.timestamp())
-                except ValueError:
-                    continue
-            
-            # 尝试提取纯数字日期格式
-            date_match = re.search(r'(\d{1,2})-(\d{1,2})', time_str)
-            if date_match:
-                month, day = int(date_match.group(1)), int(date_match.group(2))
-                try:
-                    parsed_time = datetime.datetime(current_time.year, month, day)
-                    # 如果是未来日期，则认为是去年
-                    if parsed_time > current_time:
-                        parsed_time = parsed_time.replace(year=current_time.year - 1)
-                    return int(parsed_time.timestamp())
-                except ValueError:
-                    pass
-                    
-        except Exception:
-            # 移除debug日志以提高性能
-            pass
-        
-        return 0
+
 
 
 async def fetch_videos(uid, start_date, end_date, extended_pages=False, headless=None):
@@ -1184,13 +1175,13 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
         logger.debug(f"  使用配置文件中的无头模式设置: {headless}")
     
     # 记录当前配置状态
-    log_configuration_state()
+    log_config()
     
     all_videos = []
     
     for attempt in range(BROWSER_CONFIG["retry_attempts"]):
         try:
-            log_retry_attempt(attempt, BROWSER_CONFIG["retry_attempts"], "开始尝试", None)
+            log_retry(attempt, BROWSER_CONFIG["retry_attempts"], "开始尝试", None)
             logger.info(f"Playwright模式 - 第 {attempt + 1} 次尝试获取视频数据...")
             
             async with PlaywrightBrowserSimulator(headless=headless) as browser:
@@ -1232,7 +1223,7 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
                         
                         # 解析视频数据
                         page_videos = browser.parse_videos_from_html(html_content)
-                        log_video_parsing_details(page_videos, f"第{page}页解析结果")
+                        log_video_parsing(page_videos, f"第{page}页解析结果")
                         
                         if not page_videos:
                             logger.info(f"第 {page} 页没有更多视频数据，停止翻页")
@@ -1324,26 +1315,15 @@ async def fetch_videos_playwright(uid, start_date, end_date, extended_pages=Fals
     raise Exception("无法获取视频数据")
 
 
-def configure_browser_settings(**kwargs):
+def configure_browser(**kwargs):
     """
     配置浏览器设置
     
     可用参数:
     - timeout: 超时时间
-    - retry_attempts: 重试次数
-    - retry_delay: 重试延迟
-    - page_delay: 页面间隔
+    - retry_attempts: 重试次数  
     - headless: 是否无头模式
     - browser_type: 浏览器类型
-    
-    时间配置参数:
-    - page_load_wait: 页面加载等待时间(毫秒)
-    - pagination_wait: 分页点击等待时间(毫秒)
-    - post_action_wait: 操作后等待时间(毫秒)
-    - page_interval_min: 页面间最小间隔(秒)
-    - page_interval_max: 页面间最大间隔(秒)
-    - network_timeout: 网络超时(毫秒)
-    - element_timeout: 元素等待超时(毫秒)
     """
     global TIMING_CONFIG
     
@@ -1366,11 +1346,11 @@ def configure_browser_settings(**kwargs):
     
     # 记录更新后的配置状态
     if DEBUG_CONFIG.get("enabled", False):
-        log_configuration_state()
+        log_config()
 
 
 def enable_fast_mode():
-    """启用快速模式 - 一键优化性能"""
+    """启用快速模式"""
     logger.debug("⚡ 启用快速模式，更新配置...")
     
     old_timing = TIMING_CONFIG.copy()
@@ -1399,7 +1379,7 @@ def enable_fast_mode():
 
 
 def enable_stable_mode():
-    """启用稳定模式 - 确保最大兼容性"""
+    """启用稳定模式"""
     logger.debug("🛡️ 启用稳定模式，更新配置...")
     
     old_timing = TIMING_CONFIG.copy()
@@ -1427,10 +1407,8 @@ def enable_stable_mode():
         logger.debug(f"  headless: {old_headless} -> {BROWSER_CONFIG['headless']}")
 
 
-def get_troubleshooting_info():
-    """
-    返回故障排除信息
-    """
+def get_troubleshooting():
+    """返回故障排除信息"""
     info = [
         "=== 李大霄指数计算程序故障排除信息 ===",
         f"当前时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -1461,7 +1439,7 @@ def get_troubleshooting_info():
         "快速优化方法:",
         "1. 导入: from crawler import enable_fast_mode",
         "2. 调用: enable_fast_mode()  # 启用4倍速度优化",
-        "3. 或者: configure_browser_settings(page_load_wait=100, network_timeout=3000)",
+        "3. 或者: configure_browser(page_load_wait=100, network_timeout=3000)",
         "",
         "推荐解决方案:",
         "1. 检查网络连接和防火墙设置",

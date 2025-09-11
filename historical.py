@@ -25,7 +25,7 @@ class HistoricalCalculator:
         """
         pass
     
-    def calculate_historical_index(self, videos: List[Dict], target_date: str,
+    def calc_historical_index(self, videos: List[Dict], target_date: str,
                                  current_date: Optional[str] = None) -> float:
         """
         计算指定历史日期的李大霄指数
@@ -81,7 +81,7 @@ class HistoricalCalculator:
         # 基于筛选后的视频数据计算指数
         return calculate_index(filtered_videos)
     
-    def calculate_batch_historical(self, videos: List[Dict], 
+    def calc_batch_historical(self, videos: List[Dict], 
                                  date_range: List[str],
                                  current_date: Optional[str] = None) -> List[Dict]:
         """
@@ -97,7 +97,7 @@ class HistoricalCalculator:
         
         for date in date_range:
             try:
-                historical_index = self.calculate_historical_index(
+                historical_index = self.calc_historical_index(
                     videos, date, current_date
                 )
                 results.append({
@@ -365,7 +365,7 @@ class HistoricalCalculator:
         return dates
 
 
-def create_historical_calculator() -> HistoricalCalculator:
+def create_calculator() -> HistoricalCalculator:
     """
     创建历史计算器实例
     
@@ -375,8 +375,8 @@ def create_historical_calculator() -> HistoricalCalculator:
 
 
 # 便捷函数
-def calculate_historical_index(videos: List[Dict], target_date: str,
-                             current_date: Optional[str] = None) -> float:
+def calc_historical_index(videos: List[Dict], target_date: str,
+                         current_date: Optional[str] = None) -> float:
     """
     便捷函数：计算单个历史日期的指数
     根据李大霄指数计算规则：包含目标日期及其前6天内发布的视频（共7天）
@@ -386,12 +386,12 @@ def calculate_historical_index(videos: List[Dict], target_date: str,
     :param current_date: 当前日期，默认为今天
     :return: 基于7天日期范围内视频的历史指数值
     """
-    calculator = create_historical_calculator()
-    return calculator.calculate_historical_index(videos, target_date, current_date)
+    calculator = create_calculator()
+    return calculator.calc_historical_index(videos, target_date, current_date)
 
 
-def calculate_batch_historical(videos: List[Dict], date_range: List[str],
-                              current_date: Optional[str] = None) -> List[Dict]:
+def calc_batch_historical(videos: List[Dict], date_range: List[str],
+                         current_date: Optional[str] = None) -> List[Dict]:
     """
     便捷函数：批量计算历史时间序列
     根据李大霄指数计算规则：每个日期基于其及前6天内发布的视频计算（共7天）
@@ -401,8 +401,8 @@ def calculate_batch_historical(videos: List[Dict], date_range: List[str],
     :param current_date: 当前日期，默认为今天
     :return: 历史数据列表
     """
-    calculator = create_historical_calculator()
-    return calculator.calculate_batch_historical(videos, date_range, current_date)
+    calculator = create_calculator()
+    return calculator.calc_batch_historical(videos, date_range, current_date)
 
 
 def debug_calculation_process(videos: List[Dict], target_date: str,
@@ -416,7 +416,7 @@ def debug_calculation_process(videos: List[Dict], target_date: str,
     :param current_date: 当前日期，默认为今天
     :return: 详细的调试信息字典
     """
-    calculator = create_historical_calculator()
+    calculator = create_calculator()
     return calculator.debug_calculation_process(videos, target_date, current_date)
 
 
@@ -433,7 +433,7 @@ def debug_batch_calculation(videos: List[Dict], date_range: List[str],
     :param sample_dates: 采样调试的日期数量（从头尾各取几个）
     :return: 批量调试信息
     """
-    calculator = create_historical_calculator()
+    calculator = create_calculator()
     
     # 选择采样日期进行详细调试
     sample_indices = []
@@ -465,7 +465,7 @@ def debug_batch_calculation(videos: List[Dict], date_range: List[str],
         })
     
     # 分析整体趋势
-    all_results = calculator.calculate_batch_historical(videos, date_range, current_date)
+    all_results = calculator.calc_batch_historical(videos, date_range, current_date)
     indices = [r["index"] for r in all_results if "error" not in r]
     
     if indices:

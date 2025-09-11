@@ -11,7 +11,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from historical import HistoricalCalculator, calculate_historical_index, calculate_batch_historical
+from historical import HistoricalCalculator, calc_historical_index, calc_batch_historical
 import datetime
 
 
@@ -37,7 +37,7 @@ def test_single_date_calculation():
     calculator = HistoricalCalculator()
     
     # 计算历史指数（应该等于当前指数）
-    historical_index = calculator.calculate_historical_index(
+    historical_index = calculator.calc_historical_index(
         mock_videos, "2024-08-20", "2024-08-28"
     )
     
@@ -63,7 +63,7 @@ def test_batch_calculation():
     date_range = ["2024-08-20", "2024-08-21", "2024-08-22"]
     
     # 批量计算
-    results = calculator.calculate_batch_historical(mock_videos, date_range, "2024-08-28")
+    results = calculator.calc_batch_historical(mock_videos, date_range, "2024-08-28")
     
     # 验证结果
     assert len(results) == 3, "Should return 3 results"
@@ -93,14 +93,14 @@ def test_date_validation():
     
     # 测试未来日期应该抛出异常
     try:
-        calculator.calculate_historical_index(mock_videos, "2025-01-01", "2024-08-28")
+        calculator.calc_historical_index(mock_videos, "2025-01-01", "2024-08-28")
         assert False, "Should raise exception for future date"
     except ValueError as e:
         print(f"✓ 正确捕获未来日期错误: {str(e)}")
     
     # 测试有效日期应该成功
     try:
-        result = calculator.calculate_historical_index(mock_videos, "2024-08-15", "2024-08-28")
+        result = calculator.calc_historical_index(mock_videos, "2024-08-15", "2024-08-28")
         assert result > 0, "Valid date should return positive result"
         print("✓ 有效日期计算成功")
     except Exception as e:
@@ -137,13 +137,13 @@ def test_convenience_functions():
     ]
     
     # 测试单日期便捷函数
-    result1 = calculate_historical_index(mock_videos, "2024-08-20", "2024-08-28")
+    result1 = calc_historical_index(mock_videos, "2024-08-20", "2024-08-28")
     assert result1 > 0, "Convenience function should return positive result"
     print(f"✓ 单日期便捷函数结果: {result1:.2f}")
     
     # 测试批量便捷函数
     date_range = ["2024-08-20", "2024-08-21"]
-    results = calculate_batch_historical(mock_videos, date_range, "2024-08-28")
+    results = calc_batch_historical(mock_videos, date_range, "2024-08-28")
     assert len(results) == 2, "Should return 2 results"
     print(f"✓ 批量便捷函数结果数量: {len(results)}")
     
@@ -234,7 +234,7 @@ def test_historical_index_calculation():
     
     # 测试不同模型
     for model in ["exponential", "linear", "hybrid"]:
-        historical_index = calculate_historical_index(
+        historical_index = calc_historical_index(
             mock_videos, target_date, current_date, model
         )
         print(f"✓ {model} 模型计算结果: {historical_index:.2f}")
@@ -256,7 +256,7 @@ def test_batch_calculation():
     current_date = "2024-01-10"
     date_range = ["2024-01-08", "2024-01-09", "2024-01-10"]
     
-    results = calculate_batch_historical(
+    results = calc_batch_historical(
         mock_videos, date_range, current_date
     )
     

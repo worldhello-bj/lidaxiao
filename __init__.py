@@ -22,7 +22,7 @@ __version__ = "1.0.0"
 __author__ = "GitHub Copilot"
 
 # Convenience imports for easier access to main functions
-from .calculator import calculate_index, calculate_video_contribution
+from .calculator import calculate_index, calc_contribution
 from .storage import save_all_data, load_history_data
 from .visualizer import generate_all_charts
 from .crawler import configure_api_settings, get_api_troubleshooting_info, SecurityControlException
